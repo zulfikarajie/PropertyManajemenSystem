@@ -1,0 +1,203 @@
+/* Invoice print template — A4-friendly, PMS visual identity (ink/bronze on white).
+ * Screen: print area hidden. Print: only the invoice document is visible.
+ * General print-CSS guidance (no verified ui-ux-pro-max print match found):
+ * proper @page margins, repeating thead, break-inside avoidance, no clipping.
+ */
+
+.invoice-print-area {
+  display: none;
+}
+
+.invoice-print {
+  font-family: var(--font-family-sans);
+  color: #232D36;
+  background: #FFFFFF;
+}
+
+.invoice-print__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  border-bottom: 2px solid #232D36;
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+}
+
+.invoice-print__brand {
+  font-size: 22px;
+  font-weight: 700;
+  color: #232D36;
+}
+
+.invoice-print__sub {
+  font-size: 12px;
+  color: #6B7881;
+  margin-top: 2px;
+}
+
+.invoice-print__titleblock {
+  text-align: right;
+}
+
+.invoice-print__title {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #232D36;
+}
+
+.invoice-print__number {
+  font-size: 13px;
+  font-weight: 600;
+  color: #97764D;
+  margin-top: 2px;
+}
+
+.invoice-print__meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 16px;
+}
+
+.invoice-print__metacol--right {
+  min-width: 240px;
+}
+
+.invoice-print__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 3px 0;
+}
+
+.invoice-print__row--total {
+  border-top: 1px solid #C7BBAB;
+  margin-top: 6px;
+  padding-top: 8px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.invoice-print__label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6B7881;
+}
+
+.invoice-print__value {
+  font-size: 13px;
+  font-weight: 600;
+  color: #232D36;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.invoice-print__muted {
+  font-size: 13px;
+  color: #3A454E;
+  overflow-wrap: anywhere;
+}
+
+.invoice-print__section {
+  margin-bottom: 16px;
+  break-inside: avoid;
+}
+
+.invoice-print__sectiontitle {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #232D36;
+  border-bottom: 1px solid #C7BBAB;
+  padding-bottom: 4px;
+  margin-bottom: 8px;
+}
+
+.invoice-print__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.invoice-print__table th {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6B7881;
+  border-bottom: 1px solid #232D36;
+  padding: 6px 8px;
+}
+
+.invoice-print__table td {
+  border-bottom: 1px solid #E3DED6;
+  padding: 7px 8px;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.invoice-print__table tr {
+  break-inside: avoid;
+}
+
+.invoice-print__totals {
+  margin-left: auto;
+  width: 280px;
+  max-width: 100%;
+  margin-bottom: 16px;
+  break-inside: avoid;
+}
+
+.invoice-print__footer {
+  border-top: 1px solid #C7BBAB;
+  padding-top: 10px;
+  font-size: 12px;
+  color: #6B7881;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 14mm;
+  }
+
+  html, body {
+    background: #FFFFFF !important;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  .invoice-print-area,
+  .invoice-print-area * {
+    visibility: visible;
+  }
+
+  .invoice-print-area {
+    display: block;
+    position: absolute;
+    inset: 0;
+    padding: 0;
+    margin: 0;
+  }
+
+  .invoice-print {
+    width: 100%;
+  }
+
+  .invoice-print__table thead {
+    display: table-header-group;
+  }
+
+  .invoice-print__table tfoot {
+    display: table-footer-group;
+  }
+}

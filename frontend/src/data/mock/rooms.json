@@ -1,0 +1,66 @@
+[
+  {
+    "id": "room-001",
+    "roomNumber": "101",
+    "roomTypeId": "room-type-001",
+    "status": "active",
+    "createdAt": "2026-01-01T00:00:00Z",
+    "updatedAt": "2026-09-14T00:00:00Z"
+  },
+  {
+    "id": "room-002",
+    "roomNumber": "102",
+    "roomTypeId": "room-type-001",
+    "status": "active",
+    "createdAt": "2026-01-01T00:00:00Z",
+    "updatedAt": "2026-09-14T00:00:00Z"
+  },
+  {
+    "id": "room-003",
+    "roomNumber": "103",
+    "roomTypeId": "room-type-002",
+    "status": "active",
+    "createdAt": "2026-01-05T00:00:00Z",
+    "updatedAt": "2026-09-14T00:00:00Z"
+  },
+  {
+    "id": "room-004",
+    "roomNumber": "201",
+    "roomTypeId": "room-type-003",
+    "status": "active",
+    "createdAt": "2026-01-10T00:00:00Z",
+    "updatedAt": "2026-09-14T00:00:00Z"
+  },
+  {
+    "id": "room-005",
+    "roomNumber": "202",
+    "roomTypeId": "room-type-004",
+    "status": "maintenance",
+    "createdAt": "2026-01-15T00:00:00Z",
+    "updatedAt": "2026-09-14T00:00:00Z"
+  },
+  {
+    "id": "room-006",
+    "roomNumber": "301",
+    "roomTypeId": "room-type-002",
+    "status": "active",
+    "createdAt": "2026-02-01T00:00:00Z",
+    "updatedAt": "2026-09-14T00:00:00Z"
+  },
+  {
+    "id": "room-007",
+    "roomNumber": "302",
+    "roomTypeId": "room-type-005",
+    "status": "inactive",
+    "createdAt": "2026-02-01T00:00:00Z",
+    "updatedAt": "2026-09-14T00:00:00Z"
+  },
+  {
+    "id": "room-008",
+    "roomNumber": "401",
+    "roomTypeId": "room-type-004",
+    "status": "active",
+    "createdAt": "2026-02-10T00:00:00Z",
+    "updatedAt": "2026-09-14T00:00:00Z"
+  }
+]
