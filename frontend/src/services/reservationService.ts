@@ -50,6 +50,7 @@ class ReservationService {
     rooms.forEach((room) => {
       const newRoom: ReservationRoom = {
         ...room,
+        reservationId: room.reservationId && room.reservationId !== 'pending' ? room.reservationId : newReservation.id,
         id: `res-room-${String(this.reservationRooms.length + 1).padStart(3, '0')}`,
         createdAt: now,
       };

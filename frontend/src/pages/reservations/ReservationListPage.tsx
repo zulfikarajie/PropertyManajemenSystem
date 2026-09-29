@@ -9,9 +9,8 @@ import { ReservationCard } from '@/components/shared/ReservationCard';
 import { Button } from '@/components/shared/Button';
 import { Card } from '@/components/shared/Card';
 import { Input } from '@/components/shared/Input';
-import { Modal } from '@/components/shared/Modal';
 import { Pagination } from '@/components/shared/Pagination';
-import { ReservationFormPanel } from '@/components/shared/ReservationFormPanel';
+import { ReservationWizardModal } from '@/components/shared/ReservationWizardModal';
 import { reservationSources, reservationSourceLabels, reservationStatusLabels } from '@/constants/reservationStatuses';
 import { paymentStatuses } from '@/constants/invoiceStatuses';
 import '../../styles/reservation-boards.css';
@@ -592,11 +591,9 @@ export default function ReservationListPage() {
         />
       )}
 
-      <Modal open={showForm} onClose={() => setShowForm(false)} title="New Reservation" size="xl">
-        {showForm && (
-          <ReservationFormPanel key="new" onDone={() => setShowForm(false)} />
-        )}
-      </Modal>
+      {showForm && (
+        <ReservationWizardModal open={showForm} onClose={() => setShowForm(false)} onSaved={() => setShowForm(false)} />
+      )}
     </div>
   );
 }

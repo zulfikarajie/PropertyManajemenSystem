@@ -8,9 +8,14 @@ interface RoomSelectorProps {
   selectedRooms: string[];
   onRoomToggle: (roomId: string) => void;
   disabled?: boolean;
+  /** Mock availability: rooms booked by other reservations for the selected dates. */
+  unavailableRoomIds?: string[];
+  unavailableLabel?: string;
+  /** Limit visible groups to one room type ('all' shows everything). */
+  roomTypeFilter?: string;
 }
 
-export function RoomSelector({ selectedRooms, onRoomToggle, disabled = false }: RoomSelectorProps) {
+export function RoomSelector({ selectedRooms, onRoomToggle, disabled = false, unavailableRoomIds = [], unavailableLabel = 'Booked', roomTypeFilter = 'all' }: RoomSelectorProps) {
   const rooms = roomService.getAll();
 
   const getRoomTypeName = (roomTypeId: string) => {
@@ -29,9 +34,11 @@ export function RoomSelector({ selectedRooms, onRoomToggle, disabled = false }: 
       groupsMap.set(room.roomTypeId, { roomTypeId: room.roomTypeId, roomTypeName, rooms: [room] });
     }
   }
-  const groups = Array.from(groupsMap.values()).sort((a, b) =>
-    a.roomTypeName.localeCompare(b.roomTypeName),
-  );
+  const groups = Array.from(groupsMap.values())
+    .filter((g) => roomTypeFilter === 'all' || g.roomTypeId === roomTypeFilter)
+    .sort((a, b) =>
+      a.roomTypeName.localeCompare(b.roomTypeName),
+    );
 
   if (groups.length === 0) {
     return (
@@ -87,8 +94,9 @@ export function RoomSelector({ selectedRooms, onRoomToggle, disabled = false }: 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '12px' }}>
               {group.rooms.map((room) => {
                 const isSelected = selectedRooms.includes(room.id);
-                const isAvailable = room.status === 'active';
-                const clickable = isAvailable && !disabled;
+                const isBooked = unavailableRoomIds.includes(room.id);
+                const isAvailable = room.status === 'active' && !isBooked;
+                const clickable = (isAvailable || (isSelected && isBooked)) && !disabled;
 
                 return (
                   <button
@@ -96,7 +104,7 @@ export function RoomSelector({ selectedRooms, onRoomToggle, disabled = false }: 
                     type="button"
                     disabled={!clickable}
                     aria-pressed={isSelected}
-                    aria-label={`Room ${room.roomNumber}, ${group.roomTypeName}, ${isSelected ? 'selected' : isAvailable ? 'available' : room.status}`}
+                    aria-label={`Room ${room.roomNumber}, ${group.roomTypeName}, ${isSelected ? 'selected' : isAvailable ? 'available' : isBooked ? unavailableLabel : room.status}`}
                     onClick={() => clickable && onRoomToggle(room.id)}
                     style={{
                       position: 'relative',
@@ -148,10 +156,10 @@ export function RoomSelector({ selectedRooms, onRoomToggle, disabled = false }: 
                     <div style={{ fontSize: '12px', color: '#6B7881', marginTop: '2px' }}>{group.roomTypeName}</div>
                     <div style={{ marginTop: '8px', display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
                       <Badge variant={isAvailable ? 'success' : 'warning'} size="sm">
-                        {isAvailable ? 'Available' : room.status}
+                        {isAvailable ? 'Available' : isBooked ? unavailableLabel : room.status}
                       </Badge>
                       {!isAvailable && (
-                        <span style={{ fontSize: '11px', color: '#6B7881' }}>Unavailable</span>
+                        <span style={{ fontSize: '11px', color: '#6B7881' }}>{isBooked ? 'Overlaps another reservation' : 'Unavailable'}</span>
                       )}
                     </div>
                   </button>
