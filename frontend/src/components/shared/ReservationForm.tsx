@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -8,6 +9,11 @@ import { Button } from './Button';
 import { reservationSources, reservationSourceLabels } from '@/constants/reservationStatuses';
 import { RoomSelector } from './RoomSelector';
 import { Card } from './Card';
+import { ReservationPricingPanel } from './ReservationPricingPanel';
+import { useReservationPricing } from '@/hooks/useReservationPricing';
+import { roomService } from '@/services/roomService';
+import { roomTypeService } from '@/services/roomTypeService';
+import type { ReservationPricingState } from '@/types/pricing.types';
 
 const createReservationSchema = z.object({
   guestName: z.string().min(2, 'Guest name must be at least 2 characters'),
@@ -16,18 +22,50 @@ const createReservationSchema = z.object({
   checkOutDate: z.string().min(1, 'Check-out date is required'),
   roomIds: z.array(z.string()).min(1, 'At least one room is required'),
   notes: z.string().max(1000, 'Notes must be at most 1000 characters').optional().default(''),
+}).refine((data) => {
+  if (!data.checkInDate || !data.checkOutDate) return true;
+  return new Date(data.checkOutDate) > new Date(data.checkInDate);
+}, {
+  message: 'Check-out must be after check-in',
+  path: ['checkOutDate'],
 });
 
 type CreateReservationFormData = z.infer<typeof createReservationSchema>;
 
+export interface ReservationFormSubmitData extends CreateReservationFormData {
+  pricing: ReservationPricingState;
+  roomTotal: number;
+  dpAmount: number;
+  remainingBalance: number;
+}
+
 interface ReservationFormProps {
   initialData?: Partial<CreateReservationFormData>;
-  onSubmit: (data: CreateReservationFormData) => void;
+  initialPricing?: Partial<ReservationPricingState> | null;
+  onSubmit: (data: ReservationFormSubmitData) => void;
   onCancel?: () => void;
   loading?: boolean;
 }
 
-export function ReservationForm({ initialData, onSubmit, onCancel, loading = false }: ReservationFormProps) {
+function resolveReference(roomIds: string[]): { referenceRate: number; roomTypeName: string } {
+  if (roomIds.length === 0) return { referenceRate: 0, roomTypeName: '' };
+  let total = 0;
+  const names = new Set<string>();
+  for (const roomId of roomIds) {
+    const room = roomService.getById(roomId);
+    if (!room) continue;
+    const rt = roomTypeService.getById(room.roomTypeId);
+    if (!rt) continue;
+    total += Number(rt.defaultRate) || 0;
+    names.add(rt.name);
+  }
+  return {
+    referenceRate: total,
+    roomTypeName: names.size === 1 ? [...names][0] : names.size > 1 ? `${names.size} room types` : '',
+  };
+}
+
+export function ReservationForm({ initialData, initialPricing, onSubmit, onCancel, loading = false }: ReservationFormProps) {
   const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<CreateReservationFormData>({
     resolver: zodResolver(createReservationSchema),
     defaultValues: {
@@ -41,6 +79,18 @@ export function ReservationForm({ initialData, onSubmit, onCancel, loading = fal
   });
 
   const selectedRooms = watch('roomIds') || [];
+  const checkInDate = watch('checkInDate') || '';
+  const checkOutDate = watch('checkOutDate') || '';
+  const source = watch('source') || '';
+
+  const { referenceRate, roomTypeName } = useMemo(() => resolveReference(selectedRooms), [selectedRooms]);
+
+  const pricingController = useReservationPricing({
+    checkInDate,
+    checkOutDate,
+    referenceRate,
+    initial: initialPricing ?? null,
+  });
 
   const handleRoomToggle = (roomId: string) => {
     const current = watch('roomIds') || [];
@@ -51,8 +101,21 @@ export function ReservationForm({ initialData, onSubmit, onCancel, loading = fal
     }
   };
 
+  const handleValidSubmit = (data: CreateReservationFormData) => {
+    if (!pricingController.validation.isValid) {
+      return;
+    }
+    onSubmit({
+      ...data,
+      pricing: pricingController.pricing,
+      roomTotal: pricingController.calc.roomTotal,
+      dpAmount: pricingController.calc.dpAmount,
+      remainingBalance: pricingController.calc.remainingBalance,
+    });
+  };
+
   return (
-    <form onSubmit={handleSubmit(onSubmit)} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+    <form onSubmit={handleSubmit(handleValidSubmit)} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       <Card>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '16px' }}>
           <Input
@@ -63,7 +126,7 @@ export function ReservationForm({ initialData, onSubmit, onCancel, loading = fal
             placeholder="Enter guest name"
           />
           <Select
-            label="Source"
+            label="Rate Source"
             error={!!errors.source}
             options={reservationSources.map((s) => ({ value: s, label: reservationSourceLabels[s] || s }))}
             {...register('source')}
@@ -103,6 +166,13 @@ export function ReservationForm({ initialData, onSubmit, onCancel, loading = fal
           <span style={{ fontSize: '12px', color: '#C85C5C', marginTop: '4px', display: 'block' }}>{errors.roomIds.message}</span>
         )}
       </Card>
+
+      <ReservationPricingPanel
+        controller={pricingController}
+        referenceRate={referenceRate}
+        roomTypeName={roomTypeName}
+        rateSource={source}
+      />
 
       <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
         {onCancel && (

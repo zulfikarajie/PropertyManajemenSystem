@@ -1,14 +1,19 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Pencil } from 'lucide-react';
 import { reservationService } from '@/services/reservationService';
+import { reservationPricingService } from '@/services/reservationPricingService';
+import { roomService } from '@/services/roomService';
+import { roomTypeService } from '@/services/roomTypeService';
 import { Button } from '@/components/shared/Button';
 import { Badge } from '@/components/shared/Badge';
 import { Card } from '@/components/shared/Card';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
-import { reservationStatusLabels } from '@/constants/reservationStatuses';
-import { Modal } from '@/components/shared/Modal';
-import { ReservationFormPanel } from '@/components/shared/ReservationFormPanel';
+import { reservationStatusLabels, reservationSourceLabels } from '@/constants/reservationStatuses';
+import { ReservationWizardModal } from '@/components/shared/ReservationWizardModal';
+import { ReservationPricingPanel } from '@/components/shared/ReservationPricingPanel';
+import { calculatePricing } from '@/utils/pricingUtils';
+import type { ReservationPricingController } from '@/hooks/useReservationPricing';
 
 const statusVariantMap: Record<string, 'default' | 'success' | 'warning' | 'danger' | 'info'> = {
   reserved: 'warning',
@@ -26,6 +31,68 @@ export default function ReservationDetailPage() {
 
   const reservation = id ? service.getById(id) : undefined;
   const rooms = id ? service.getReservationRooms(id) : [];
+
+  const { referenceRate, roomTypeName } = useMemo(() => {
+    let total = 0;
+    const names = new Set<string>();
+    for (const r of rooms) {
+      const room = roomService.getById(r.roomId);
+      const rt = room?.roomTypeId ? roomTypeService.getById(room.roomTypeId) : undefined;
+      if (rt) {
+        total += Number(rt.defaultRate) || 0;
+        names.add(rt.name);
+      } else if (r.roomTypeName) {
+        names.add(r.roomTypeName);
+      }
+    }
+    if (total === 0 && rooms.length > 0) {
+      // Fallback: derive per-night reference from stored total when room-type lookup fails
+      const nights = Math.max(
+        1,
+        Math.ceil((new Date(reservation?.checkOutDate || '').getTime() - new Date(reservation?.checkInDate || '').getTime()) / (1000 * 60 * 60 * 24)) || 1,
+      );
+      total = Math.round((reservation?.totalAmount || 0) / nights);
+    }
+    return {
+      referenceRate: total,
+      roomTypeName: names.size === 1 ? [...names][0] : names.size > 1 ? `${names.size} room types` : rooms[0]?.roomTypeName || '',
+    };
+  }, [rooms, reservation]);
+
+  const pricingState = useMemo(() => {
+    if (!id || !reservation) return null;
+    return reservationPricingService.getState(id, {
+      checkInDate: reservation.checkInDate,
+      checkOutDate: reservation.checkOutDate,
+      referenceRate,
+      rateSource: reservation.source,
+    });
+  }, [id, reservation, referenceRate]);
+
+  const calc = useMemo(() => {
+    if (!pricingState) return null;
+    return calculatePricing(pricingState);
+  }, [pricingState]);
+
+  const readOnlyController = useMemo((): ReservationPricingController | null => {
+    if (!pricingState || !calc) return null;
+    const noop = () => {};
+    return {
+      pricing: pricingState,
+      setPricing: noop as never,
+      nightDates: pricingState.nightlyRates.map((n) => n.date),
+      calc,
+      validation: { nightlyErrors: {}, isValid: true },
+      setMode: noop as never,
+      setSameRate: noop as never,
+      setNightRate: noop as never,
+      applyToAllNights: noop as never,
+      setPaymentType: noop as never,
+      setDpType: noop as never,
+      setDpPercentage: noop as never,
+      setDpFixedAmount: noop as never,
+    };
+  }, [pricingState, calc]);
 
   if (!reservation) {
     return (
@@ -54,6 +121,8 @@ export default function ReservationDetailPage() {
     navigate(0);
   };
 
+  const displayTotal = calc?.roomTotal ?? reservation.totalAmount;
+
   return (
     <div style={{ padding: 'var(--space-xl, 20px)', maxWidth: '1000px', margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '20px' }}>
@@ -71,16 +140,16 @@ export default function ReservationDetailPage() {
             <p style={{ margin: 0, fontSize: '16px', fontWeight: 600, color: '#232D36' }}>{reservation.guestName}</p>
           </div>
           <div>
-            <h4 style={{ margin: '0 0 4px 0', fontSize: '12px', color: '#6B7881', textTransform: 'uppercase' }}>Source</h4>
-            <p style={{ margin: 0, fontSize: '16px', fontWeight: 600, color: '#232D36' }}>{reservation.source}</p>
+            <h4 style={{ margin: '0 0 4px 0', fontSize: '12px', color: '#6B7881', textTransform: 'uppercase' }}>Rate Source</h4>
+            <p style={{ margin: 0, fontSize: '16px', fontWeight: 600, color: '#232D36' }}>{reservationSourceLabels[reservation.source] || reservation.source}</p>
           </div>
           <div>
             <h4 style={{ margin: '0 0 4px 0', fontSize: '12px', color: '#6B7881', textTransform: 'uppercase' }}>Status</h4>
             <Badge variant={statusVariantMap[reservation.status] || 'default'}>{reservationStatusLabels[reservation.status]}</Badge>
           </div>
           <div>
-            <h4 style={{ margin: '0 0 4px 0', fontSize: '12px', color: '#6B7881', textTransform: 'uppercase' }}>Total Amount</h4>
-            <p style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#232D36' }}>Rp {reservation.totalAmount.toLocaleString('id-ID')}</p>
+            <h4 style={{ margin: '0 0 4px 0', fontSize: '12px', color: '#6B7881', textTransform: 'uppercase' }}>Room Total</h4>
+            <p style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#232D36' }}>Rp {displayTotal.toLocaleString('id-ID')}</p>
           </div>
         </div>
       </Card>
@@ -138,8 +207,23 @@ export default function ReservationDetailPage() {
               </div>
             );
           })}
+          {rooms.length === 0 && (
+            <p style={{ margin: 0, fontSize: '14px', fontStyle: 'italic', color: '#6B7881' }}>No rooms assigned.</p>
+          )}
         </div>
       </Card>
+
+      {readOnlyController && (
+        <div style={{ marginBottom: '16px' }}>
+          <ReservationPricingPanel
+            controller={readOnlyController}
+            referenceRate={referenceRate}
+            roomTypeName={roomTypeName}
+            rateSource={reservation.source}
+            readOnly
+          />
+        </div>
+      )}
 
       <Card style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
@@ -187,11 +271,9 @@ export default function ReservationDetailPage() {
         </div>
       </Card>
 
-      <Modal open={showEdit} onClose={() => setShowEdit(false)} title="Edit Reservation" size="xl">
-        {showEdit && (
-          <ReservationFormPanel key={reservation.id} id={reservation.id} onDone={() => setShowEdit(false)} />
-        )}
-      </Modal>
+      {showEdit && (
+        <ReservationWizardModal open={showEdit} id={reservation.id} onClose={() => setShowEdit(false)} onSaved={() => setShowEdit(false)} />
+      )}
     </div>
   );
 }
