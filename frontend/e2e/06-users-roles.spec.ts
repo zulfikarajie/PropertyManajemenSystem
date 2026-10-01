@@ -13,7 +13,7 @@ test.describe('SCN-06 Users Roles Permissions', () => {
     await expect(page.getByPlaceholder(/search by name or email/i)).toBeVisible();
   });
 
-  test('SCN-06-02/03 create user via form page (no reload — mock store is in-memory)', async ({ page }) => {
+  test('SCN-06-02/03 create user via form page + duplicate shows error', async ({ page }) => {
     const stamp = Date.now();
     const email = `u${stamp}@hotel.com`;
     await page.goto('/dashboard/users/new');
@@ -23,14 +23,18 @@ test.describe('SCN-06 Users Roles Permissions', () => {
     await page.getByPlaceholder('john@hotel.com').fill(email);
     const pw = page.getByPlaceholder('Min 6 characters');
     if (await pw.count()) await pw.first().fill('password123');
-    // select a role (UserForm Role select defaults to '' — pick first real role)
+    // select a role: options are [disabled placeholder, empty 'Select a role', ...real roles]
     const roleSelect = page.locator('select').first();
-    if (await roleSelect.count()) await roleSelect.selectOption({ index: 1 }).catch(() => {});
+    if (await roleSelect.count()) await roleSelect.selectOption({ index: 2 }).catch(() => {});
     await page.getByRole('button', { name: /create user/i }).click();
-    // UserFormPage onSuccess SPA-navigates to /dashboard/users WITHOUT full reload,
-    // so the in-memory record survives. Do NOT page.goto (that resets the store).
+    // UserFormPage onSuccess SPA-navigates to /dashboard/users. The backend is
+    // persistent, so earlier runs' rows may push the new user to page 2 —
+    // search for it instead of assuming it is visible on page 1.
     await expect(page).toHaveURL(/\/dashboard\/users$/, { timeout: 15000 });
-    await expect(page.locator('body')).toContainText(new RegExp(`E2E ${stamp}`), { timeout: 10000 });
+    const search = page.getByPlaceholder(/search by name or email/i);
+    await search.fill(email);
+    await expect(page.locator('body')).toContainText(new RegExp(email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), { timeout: 10000 });
+    await search.fill('');
 
     // Duplicate email via the list's "Add User" modal (same page, no reload so the
     // in-memory record survives): modal stays open with inline error (FIXED).
@@ -41,6 +45,8 @@ test.describe('SCN-06 Users Roles Permissions', () => {
     await modal.getByPlaceholder('john@hotel.com').fill(email);
     const pwModal = modal.getByPlaceholder('Min 6 characters');
     if (await pwModal.count()) await pwModal.first().fill('password123');
+    const modalRole = modal.locator('select').first();
+    if (await modalRole.count()) await modalRole.selectOption({ index: 2 }).catch(() => {});
     await modal.getByRole('button', { name: /create user/i }).click();
     await expect(modal).toBeVisible({ timeout: 10000 });
     await expect(modal).toContainText(/already registered/i, { timeout: 10000 });

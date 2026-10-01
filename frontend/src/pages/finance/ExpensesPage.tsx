@@ -5,7 +5,6 @@ import { Card } from '@/components/shared/Card';
 import { Table } from '@/components/shared/Table';
 import { Badge } from '@/components/shared/Badge';
 import { Modal } from '@/components/shared/Modal';
-import { Select } from '@/components/shared/Select';
 import { expenseService } from '@/services/expenseService';
 import { expenseCategories, expenseCategoryLabels, expenseStatusLabels } from '@/constants/expenseCategories';
 import { ExpenseForm } from '@/components/shared/ExpenseForm';
@@ -39,7 +38,7 @@ export default function ExpensesPage() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [filterOpen, setFilterOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
-  const [draft, setDraft] = useState<{ category: string; status: string }>({ category: 'all', status: 'all' });
+  const [draft, setDraft] = useState<Record<string, string>>({ category: 'all', status: 'all' });
   const filterWrapRef = useRef<HTMLDivElement>(null);
   const expenses = service.getAll();
 

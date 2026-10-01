@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react';
-import { reservationService } from '@/services/reservationService';
+import { useEffect, useState, useMemo } from 'react';
+import { reservationService, type ApiReservation } from '@/services/reservationService';
 import { Button } from './Button';
 import { Card } from './Card';
 
@@ -54,14 +54,26 @@ const statusFillMap: Record<string, { bg: string; text: string }> = {
 
 export function CalendarView({ filterDate = new Date(), filterRoomId, filterStatus, filterSearch, onDateClick }: CalendarViewProps) {
   const [currentMonth, setCurrentMonth] = useState(filterDate);
-  const reservations = reservationService.getAll();
+  const [reservations, setReservations] = useState<ApiReservation[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    reservationService.getAll().then((rows) => {
+      if (!cancelled) setReservations(rows);
+    }).catch(() => {
+      if (!cancelled) setReservations([]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const filteredReservations = useMemo(() => {
     const q = (filterSearch || '').toLowerCase();
     return reservations.filter((r) => {
       if (filterStatus && r.status !== filterStatus) return false;
       if (filterRoomId) {
-        const rooms = reservationService.getRoomsByReservationId(r.id);
+        const rooms = r.rooms ?? [];
         if (!rooms.find((room) => room.roomId === filterRoomId)) return false;
       }
       if (q && !r.guestName.toLowerCase().includes(q) && !r.reservationCode.toLowerCase().includes(q)) return false;

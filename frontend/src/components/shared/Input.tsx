@@ -6,14 +6,19 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   errorMessage?: string;
 }
 
-export function Input({
-  label,
-  error = false,
-  errorMessage,
-  className = '',
-  style,
-  ...props
-}: InputProps) {
+export const Input = React.forwardRef<HTMLInputElement, InputProps>(function Input(
+  {
+    label,
+    error = false,
+    errorMessage,
+    className = '',
+    style,
+    onFocus,
+    onBlur,
+    ...props
+  }: InputProps,
+  ref: React.ForwardedRef<HTMLInputElement>,
+) {
   const inputStyles: React.CSSProperties = {
     width: '100%',
     fontFamily: 'var(--font-family-sans)',
@@ -45,15 +50,18 @@ export function Input({
         </label>
       )}
       <input
+        ref={ref}
         style={inputStyles}
         onFocus={(e) => {
           (e.currentTarget as HTMLElement).style.borderColor = error ? '#962222' : '#97764D';
           (e.currentTarget as HTMLElement).style.outline = '2px solid #97764D';
           (e.currentTarget as HTMLElement).style.outlineOffset = '1px';
+          onFocus?.(e);
         }}
         onBlur={(e) => {
           (e.currentTarget as HTMLElement).style.borderColor = error ? '#962222' : '#C7BBAB';
           (e.currentTarget as HTMLElement).style.outline = 'none';
+          onBlur?.(e);
         }}
         {...props}
       />
@@ -70,4 +78,6 @@ export function Input({
       )}
     </div>
   );
-}
+});
+
+Input.displayName = 'Input';

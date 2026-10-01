@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Pencil } from 'lucide-react';
 import { Button } from '@/components/shared/Button';
@@ -11,7 +11,36 @@ import '../../styles/admin-responsive.css';
 export default function UserDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [showEdit, setShowEdit] = useState(false);
-  const user = userService.getById(id || '');
+  const [user, setUser] = useState<any | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    setIsLoading(true);
+    userService.getById(id).then((u) => {
+      if (!cancelled) {
+        setUser(u ?? null);
+        setIsLoading(false);
+      }
+    }).catch(() => {
+      if (!cancelled) {
+        setUser(null);
+        setIsLoading(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [id, showEdit]);
+
+  if (isLoading) {
+    return (
+      <div style={{ padding: 'var(--space-xl, 20px)', textAlign: 'center' }}>
+        <p style={{ color: '#6B7881' }}>Loading user...</p>
+      </div>
+    );
+  }
 
   if (!user) {
     return (

@@ -1,0 +1,32 @@
+/**
+ * Wrangler configuration for the PMS Internal backend (Cloudflare Workers + D1).
+ *
+ * BEFORE FIRST DEPLOY:
+ *  1. npx wrangler d1 create pms-internal-db
+ *  2. Copy the returned `database_id` into `d1.databases[0].database_id` below.
+ *  3. npx wrangler secret put JWT_SECRET
+ *  4. Update `vars.FRONTEND_ORIGIN` to the production frontend URL.
+ *
+ * Local dev uses the local D1 database (created automatically on first
+ * `wrangler dev` / `migrations apply --local`).
+ */
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "pms-internal-backend",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-06-01",
+  "workers_dev": true,
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "pms-internal-db",
+      "database_id": "REPLACE_WITH_REAL_D1_DATABASE_ID",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    "JWT_EXPIRES_IN": "3600",
+    "RESET_TOKEN_TTL_MIN": "15",
+    "FRONTEND_ORIGIN": "http://localhost:5173"
+  }
+}

@@ -5,6 +5,7 @@ import { ActivityFeed } from '@/components/shared/ActivityFeed';
 import { Pagination } from '@/components/shared/Pagination';
 import { activityCategories, activityCategoryLabels } from '@/constants/activityTypes';
 import { activityService } from '@/services/activityService';
+import type { Activity } from '@/types/auth.types';
 import { useMemo, useState, useRef, useEffect } from 'react';
 import { ClipboardList, KeyRound, CalendarDays, Wallet, Settings, ChevronRight, Check, X } from 'lucide-react';
 import '../../styles/admin-responsive.css';
@@ -19,8 +20,24 @@ export default function ActivityLogPage() {
   const [filterOpen, setFilterOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const filterWrapRef = useRef<HTMLDivElement>(null);
+  const [allActivities, setAllActivities] = useState<Activity[]>([]);
+  const [loadError, setLoadError] = useState('');
 
-  const allActivities = service.getAll();
+  useEffect(() => {
+    let cancelled = false;
+    setLoadError('');
+    service.getAll().then((rows) => {
+      if (!cancelled) setAllActivities(rows);
+    }).catch(() => {
+      if (!cancelled) {
+        setLoadError('Failed to load activities');
+        setAllActivities([]);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const filteredActivities = useMemo(() => {
     return allActivities.filter((a) => {
@@ -70,11 +87,6 @@ export default function ActivityLogPage() {
     { label: 'Finance', value: allActivities.filter((a) => a.category === 'finance').length, icon: <Wallet size={20} aria-hidden="true" />, color: '#97764D' },
     { label: 'System', value: allActivities.filter((a) => a.category === 'system').length, icon: <Settings size={20} aria-hidden="true" />, color: '#6B7881' },
   ];
-
-  const getCategoryLabel = (key: string) => {
-    if (key === 'all') return 'All Categories';
-    return activityCategoryLabels[key as keyof typeof activityCategoryLabels] || key;
-  };
 
   return (
     <div className="adm-page">
@@ -188,6 +200,7 @@ export default function ActivityLogPage() {
         </div>
       </Card>
       <Card>
+        {loadError && <p role="alert" style={{ fontSize: '14px', color: '#962222' }}>{loadError}</p>}
         <ActivityFeed activities={paginatedActivities} />
       </Card>
       {totalPages > 1 && (

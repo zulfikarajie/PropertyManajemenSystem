@@ -1,9 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Pencil } from 'lucide-react';
-import { reservationService } from '@/services/reservationService';
+import { reservationService, type ApiReservation } from '@/services/reservationService';
 import { reservationPricingService } from '@/services/reservationPricingService';
-import { roomService } from '@/services/roomService';
 import { roomTypeService } from '@/services/roomTypeService';
 import { Button } from '@/components/shared/Button';
 import { Badge } from '@/components/shared/Badge';
@@ -28,16 +27,52 @@ export default function ReservationDetailPage() {
   const service = reservationService;
   const [confirmAction, setConfirmAction] = useState<string | null>(null);
   const [showEdit, setShowEdit] = useState(false);
+  const [reservation, setReservation] = useState<ApiReservation | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const reservation = id ? service.getById(id) : undefined;
-  const rooms = id ? service.getReservationRooms(id) : [];
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    setIsLoading(true);
+    service.getFullById(id).then((r) => {
+      if (!cancelled) {
+        setReservation(r ?? null);
+        setIsLoading(false);
+      }
+    }).catch(() => {
+      if (!cancelled) {
+        setReservation(null);
+        setIsLoading(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [id, showEdit, service]);
+
+  const rooms = useMemo(() => reservation?.rooms ?? [], [reservation]);
+  const [allTypes, setAllTypes] = useState<Array<{ id: string; name: string; defaultRate: number }>>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    roomTypeService.getAll().then((t) => {
+      if (!cancelled) setAllTypes(t);
+    }).catch(() => {
+      if (!cancelled) setAllTypes([]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const { referenceRate, roomTypeName } = useMemo(() => {
     let total = 0;
     const names = new Set<string>();
+    const typeById = new Map(allTypes.map((t) => [t.id, t]));
     for (const r of rooms) {
-      const room = roomService.getById(r.roomId);
-      const rt = room?.roomTypeId ? roomTypeService.getById(room.roomTypeId) : undefined;
+      const rt = (r as unknown as { roomTypeId?: string }).roomTypeId
+        ? typeById.get((r as unknown as { roomTypeId: string }).roomTypeId)
+        : undefined;
       if (rt) {
         total += Number(rt.defaultRate) || 0;
         names.add(rt.name);
@@ -57,11 +92,11 @@ export default function ReservationDetailPage() {
       referenceRate: total,
       roomTypeName: names.size === 1 ? [...names][0] : names.size > 1 ? `${names.size} room types` : rooms[0]?.roomTypeName || '',
     };
-  }, [rooms, reservation]);
+  }, [rooms, reservation, allTypes]);
 
   const pricingState = useMemo(() => {
     if (!id || !reservation) return null;
-    return reservationPricingService.getState(id, {
+    return reservationPricingService.getState(reservation, {
       checkInDate: reservation.checkInDate,
       checkOutDate: reservation.checkOutDate,
       referenceRate,
@@ -94,6 +129,14 @@ export default function ReservationDetailPage() {
     };
   }, [pricingState, calc]);
 
+  if (isLoading) {
+    return (
+      <div style={{ padding: 'var(--space-xl, 20px)', textAlign: 'center' }}>
+        <p style={{ color: '#6B7881' }}>Loading reservation...</p>
+      </div>
+    );
+  }
+
   if (!reservation) {
     return (
       <div style={{ padding: 'var(--space-xl, 20px)', textAlign: 'center' }}>
@@ -103,20 +146,20 @@ export default function ReservationDetailPage() {
     );
   }
 
-  const handleCheckIn = () => {
-    service.checkIn(reservation.id);
+  const handleCheckIn = async () => {
+    await service.checkIn(reservation.id);
     setConfirmAction(null);
     navigate(0);
   };
 
-  const handleCheckOut = () => {
-    service.checkOut(reservation.id);
+  const handleCheckOut = async () => {
+    await service.checkOut(reservation.id);
     setConfirmAction(null);
     navigate(0);
   };
 
-  const handleCancel = () => {
-    service.cancel(reservation.id);
+  const handleCancel = async () => {
+    await service.cancel(reservation.id);
     setConfirmAction(null);
     navigate(0);
   };

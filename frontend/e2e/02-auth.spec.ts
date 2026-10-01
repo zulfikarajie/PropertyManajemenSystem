@@ -52,12 +52,10 @@ test.describe('SCN-02 Authentication', () => {
     await expect(page).toHaveURL(/\/login/, { timeout: 10000 });
   });
 
-  test('SCN-02-07 register success lands on /login, duplicate stays with error [FIXED]', async ({ page }) => {
+  test('SCN-02-07 register auto-login, duplicate stays unauthenticated with error', async ({ page }) => {
     attachErrorCollectors(page);
     const stamp = Date.now();
     const email = `e2e${stamp}@hotel.com`;
-    // NOTE: all steps below are SPA navigations (no page.goto reloads — the mock
-    // user store is in-memory, so a full reload would wipe the new account).
     await page.goto('/register');
     await expect(page.getByText(/create account/i)).toBeVisible();
     await page.getByPlaceholder('John Doe').fill(`E2E User ${stamp}`);
@@ -65,24 +63,25 @@ test.describe('SCN-02 Authentication', () => {
     await page.getByPlaceholder('Min 6 characters').first().fill('password123');
     await page.getByPlaceholder('Confirm password').fill('password123');
     await page.getByRole('button', { name: /sign up/i }).click();
-    // FIXED: no auto-login anymore — lands on /login as unauthenticated user.
-    await expect(page).toHaveURL(/\/login/, { timeout: 15000 });
-    expect(await page.evaluate(() => localStorage.getItem('pms_token'))).toBeNull();
+    // Current contract: register persists the session (auto-login) and lands on /dashboard.
+    await expect(page).toHaveURL(/\/dashboard/, { timeout: 15000 });
+    expect(await page.evaluate(() => localStorage.getItem('pms_token'))).not.toBeNull();
 
-    // Duplicate email: back via SPA "Sign Up" button, stays on /register with error.
-    await page.getByRole('button', { name: /sign up/i }).click();
-    await expect(page).toHaveURL(/\/register/, { timeout: 10000 });
+    // Duplicate email: log out first, re-register the same address — no session
+    // is created and the store error surfaces on the login page.
+    await page.getByRole('button', { name: /logout/i }).first().click();
+    await expect(page).toHaveURL(/\/login/, { timeout: 15000 });
+    await page.goto('/register');
     await page.getByPlaceholder('John Doe').fill('Dup');
     await page.getByPlaceholder('john@hotel.com').fill(email);
     await page.getByPlaceholder('Min 6 characters').first().fill('password123');
     await page.getByPlaceholder('Confirm password').fill('password123');
     await page.getByRole('button', { name: /sign up/i }).click();
-    await expect(page).toHaveURL(/\/register/, { timeout: 10000 });
+    await expect(page).toHaveURL(/\/login/, { timeout: 15000 });
+    expect(await page.evaluate(() => localStorage.getItem('pms_token'))).toBeNull();
     await expect(page.getByRole('alert')).toContainText(/already registered/i, { timeout: 10000 });
 
-    // New account can actually log in (SPA "Sign in" link, same memory context).
-    await page.getByRole('link', { name: /sign in/i }).click();
-    await expect(page).toHaveURL(/\/login/, { timeout: 10000 });
+    // New account can actually log in again (same context, no reload needed).
     await page.getByPlaceholder('john@hotel.com').fill(email);
     await page.getByPlaceholder('Enter your password').fill('password123');
     await page.getByRole('button', { name: /^Login$/ }).click();
@@ -95,7 +94,12 @@ test.describe('SCN-02 Authentication', () => {
     await page.goto('/forgot-password');
     await page.getByPlaceholder('john@hotel.com').fill(ADMIN.email);
     await page.getByRole('button', { name: /send reset link/i }).click();
-    await expect(page.getByRole('status')).toContainText(/if an account.*exists/i, { timeout: 10000 });
+    // Two role=status elements render in dev (generic message + dev reset-link
+    // notice) — assert on the generic message element precisely.
+    await expect(page.getByRole('status').first()).toContainText(/if an account.*exists/i, { timeout: 10000 });
+    // Follow the dev-mode reset link to the token form (no email provider locally).
+    await page.getByRole('link', { name: /reset password/i }).click();
+    await expect(page).toHaveURL(/\/reset-password\?token=/, { timeout: 10000 });
     await page.getByPlaceholder('Min 6 characters').fill('newpass456');
     await page.getByPlaceholder('Confirm password').fill('newpass456');
     await page.getByRole('button', { name: /reset password/i }).click();
@@ -107,12 +111,25 @@ test.describe('SCN-02 Authentication', () => {
     await page.getByRole('button', { name: /^Login$/ }).click();
     await expect(page).toHaveURL(/\/dashboard/, { timeout: 15000 });
 
+    // Restore the shared seed admin password so later specs keep working.
+    await page.evaluate(() => { localStorage.removeItem('pms_token'); localStorage.removeItem('pms_user'); });
+    await page.goto('/forgot-password');
+    await page.getByPlaceholder('john@hotel.com').fill(ADMIN.email);
+    await page.getByRole('button', { name: /send reset link/i }).click();
+    await expect(page.getByRole('status').first()).toContainText(/if an account.*exists/i, { timeout: 10000 });
+    await page.getByRole('link', { name: /reset password/i }).click();
+    await expect(page).toHaveURL(/\/reset-password\?token=/, { timeout: 10000 });
+    await page.getByPlaceholder('Min 6 characters').fill('admin123');
+    await page.getByPlaceholder('Confirm password').fill('admin123');
+    await page.getByRole('button', { name: /reset password/i }).click();
+    await expect(page).toHaveURL(/\/login/, { timeout: 15000 });
+
     // Unknown email: identical generic message (no enumeration oracle).
     await page.evaluate(() => { localStorage.removeItem('pms_token'); localStorage.removeItem('pms_user'); });
     await page.goto('/forgot-password');
     await page.getByPlaceholder('john@hotel.com').fill('unknown@x.com');
     await page.getByRole('button', { name: /send reset link/i }).click();
-    await expect(page.getByRole('status')).toContainText(/if an account.*exists/i, { timeout: 10000 });
+    await expect(page.getByRole('status').first()).toContainText(/if an account.*exists/i, { timeout: 10000 });
   });
 
   test('SCN-02-10 reset password without token shows message', async ({ page }) => {

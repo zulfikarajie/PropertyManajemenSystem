@@ -1,6 +1,7 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Pencil, Trash2 } from 'lucide-react';
-import { reservationService } from '@/services/reservationService';
+import { reservationService, type ApiReservation } from '@/services/reservationService';
 import { reservationSourceLabels } from '@/constants/reservationStatuses';
 import { Modal } from './Modal';
 import { Badge } from './Badge';
@@ -16,8 +17,26 @@ interface InvoiceDetailPopupProps {
 }
 
 export function InvoiceDetailPopup({ invoice, onClose, onEdit, onDelete }: InvoiceDetailPopupProps) {
-  const reservation = invoice?.reservationId ? reservationService.getById(invoice.reservationId) : undefined;
-  const reservationRooms = invoice?.reservationId ? reservationService.getRoomsByReservationId(invoice.reservationId) : [];
+  const [linked, setLinked] = useState<ApiReservation | null>(null);
+
+  useEffect(() => {
+    if (!invoice?.reservationId) {
+      setLinked(null);
+      return;
+    }
+    let cancelled = false;
+    reservationService.getFullById(invoice.reservationId).then((r) => {
+      if (!cancelled) setLinked(r ?? null);
+    }).catch(() => {
+      if (!cancelled) setLinked(null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [invoice]);
+
+  const reservation = linked ?? undefined;
+  const reservationRooms = linked?.rooms ?? [];
 
   return (
     <Modal

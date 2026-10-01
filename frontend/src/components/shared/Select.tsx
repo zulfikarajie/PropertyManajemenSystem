@@ -12,15 +12,18 @@ interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
   placeholder?: string;
 }
 
-export function Select({
-  label,
-  error = false,
-  options = [],
-  placeholder = 'Pilih...',
-  className = '',
-  style,
-  ...props
-}: SelectProps) {
+export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(function Select(
+  {
+    label,
+    error = false,
+    options = [],
+    placeholder = 'Pilih...',
+    className = '',
+    style,
+    ...props
+  }: SelectProps,
+  ref: React.ForwardedRef<HTMLSelectElement>,
+) {
   const selectStyles: React.CSSProperties = {
     width: '100%',
     fontFamily: 'var(--font-family-sans)',
@@ -56,7 +59,7 @@ export function Select({
           {label}
         </label>
       )}
-      <select style={selectStyles} {...props}>
+      <select ref={ref} style={selectStyles} {...props}>
         <option value="" disabled>{placeholder}</option>
         {options.map((opt) => (
           <option key={opt.value} value={opt.value}>
@@ -66,4 +69,6 @@ export function Select({
       </select>
     </div>
   );
-}
+});
+
+Select.displayName = 'Select';

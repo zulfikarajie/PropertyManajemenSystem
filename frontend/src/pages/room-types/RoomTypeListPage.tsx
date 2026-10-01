@@ -4,9 +4,7 @@ import { roomTypeService } from '@/services/roomTypeService';
 import { Table } from '@/components/shared/Table';
 import { Button } from '@/components/shared/Button';
 import { Badge } from '@/components/shared/Badge';
-import { Card } from '@/components/shared/Card';
 import { Input } from '@/components/shared/Input';
-import { Select } from '@/components/shared/Select';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { Modal } from '@/components/shared/Modal';
 import { RoomTypeForm } from '@/components/shared/RoomTypeForm';
@@ -34,12 +32,39 @@ export default function RoomTypeListPage() {
   const [modal, setModal] = useState<RoomTypeModal>(null);
   const [filterOpen, setFilterOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
-  const [draft, setDraft] = useState<{ status: string }>({ status: 'all' });
+  const [draft, setDraft] = useState<Record<string, string>>({ status: 'all' });
   const filterWrapRef = useRef<HTMLDivElement>(null);
   const service = roomTypeService;
+  const [allTypes, setAllTypes] = useState<RoomType[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [reloadToken, setReloadToken] = useState(0);
   const closeModal = () => setModal(null);
 
-  const allTypes = service.getAll();
+  const handleModalSuccess = () => {
+    closeModal();
+    setReloadToken((t) => t + 1);
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    setIsLoading(true);
+    setLoadError('');
+    service.getAll().then((rows) => {
+      if (!cancelled) {
+        setAllTypes(rows);
+        setIsLoading(false);
+      }
+    }).catch(() => {
+      if (!cancelled) {
+        setLoadError('Failed to load room types');
+        setIsLoading(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadToken]);
 
   const filteredTypes = useMemo(() => {
     return allTypes.filter((type) => {
@@ -79,9 +104,10 @@ export default function RoomTypeListPage() {
     return () => document.removeEventListener('mousedown', onDocClick);
   }, [filterOpen]);
 
-  const handleDelete = (id: string) => {
-    service.delete(id);
+  const handleDelete = async (id: string) => {
+    await service.delete(id);
     setDeleteConfirm(null);
+    setReloadToken((t) => t + 1);
   };
 
   const columns = [
@@ -306,7 +332,9 @@ export default function RoomTypeListPage() {
         </span>
       </div>
 
-      <Table columns={columns} data={filteredTypes} />
+      {loadError && <p role="alert" style={{ fontSize: '14px', color: '#962222' }}>{loadError}</p>}
+
+      <Table columns={columns} data={filteredTypes} emptyMessage={isLoading ? 'Loading room types...' : undefined} />
 
       <ConfirmDialog
         open={!!deleteConfirm}
@@ -328,7 +356,7 @@ export default function RoomTypeListPage() {
           <RoomTypeForm
             key={modal.mode === 'edit' ? modal.id : 'new'}
             id={modal.mode === 'edit' ? modal.id : undefined}
-            onSuccess={closeModal}
+            onSuccess={handleModalSuccess}
             onCancel={closeModal}
           />
         )}

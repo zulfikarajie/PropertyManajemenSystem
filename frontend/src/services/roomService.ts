@@ -1,53 +1,78 @@
-import roomsData from '../data/mock/rooms.json';
+import { apiFetch } from './api';
 import type { Room } from '@/types/auth.types';
 
+export interface RoomPayload {
+  roomNumber: string;
+  roomTypeId: string;
+  status?: 'active' | 'inactive' | 'maintenance';
+}
+
+/**
+ * Room client backed by the real API (`/api/rooms`).
+ * Async — call sites use `useEffect` + state. Names match the previous
+ * mock-backed service. Server `search/status/roomTypeId/pagination` params
+ * exist but lists still filter client-side (capped at 100 rows).
+ */
 class RoomService {
-  private data: Room[] = [...roomsData as Room[]];
-
-  getAll(): Room[] {
-    return this.data.map((item) => ({ ...item }));
+  async getAll(): Promise<Room[]> {
+    const json = await apiFetch<{ data: Room[] }>('/api/rooms?page=1&pageSize=100');
+    return json.data;
   }
 
-  getById(id: string): Room | undefined {
-    return this.data.find((item) => item.id === id);
+  async getById(id: string): Promise<Room | undefined> {
+    try {
+      const json = await apiFetch<{ data: Room }>(`/api/rooms/${encodeURIComponent(id)}`);
+      return json.data;
+    } catch {
+      return undefined;
+    }
   }
 
-  getByRoomTypeId(roomTypeId: string): Room[] {
-    return this.data.filter((item) => item.roomTypeId === roomTypeId);
+  async getByRoomTypeId(roomTypeId: string): Promise<Room[]> {
+    const all = await this.getAll();
+    return all.filter((item) => item.roomTypeId === roomTypeId);
   }
 
-  create(data: Omit<Room, 'id' | 'createdAt' | 'updatedAt'>): Room {
-    const now = new Date().toISOString();
-    const newItem: Room = {
-      ...data,
-      id: `room-${String(this.data.length + 1).padStart(3, '0')}`,
-      createdAt: now,
-      updatedAt: now,
-    };
-    this.data.push(newItem);
-    return { ...newItem };
+  async create(data: RoomPayload): Promise<Room> {
+    const json = await apiFetch<{ data: Room }>('/api/rooms', { method: 'POST', body: data });
+    return json.data;
   }
 
-  update(id: string, updates: Partial<Room>): Room | null {
-    const index = this.data.findIndex((item) => item.id === id);
-    if (index === -1) return null;
-    this.data[index] = { ...this.data[index], ...updates, updatedAt: new Date().toISOString() };
-    return { ...this.data[index] };
+  async update(id: string, updates: Partial<RoomPayload>): Promise<Room | null> {
+    try {
+      const json = await apiFetch<{ data: Room }>(`/api/rooms/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        body: updates,
+      });
+      return json.data;
+    } catch {
+      return null;
+    }
   }
 
-  delete(id: string): boolean {
-    const index = this.data.findIndex((item) => item.id === id);
-    if (index === -1) return false;
-    this.data.splice(index, 1);
-    return true;
+  async delete(id: string): Promise<boolean> {
+    try {
+      await apiFetch(`/api/rooms/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      return true;
+    } catch {
+      return false;
+    }
   }
 
-  toggleStatus(id: string): boolean {
-    const item = this.data.find((i) => i.id === id);
+  async toggleStatus(id: string): Promise<boolean> {
+    const item = await this.getById(id);
     if (!item) return false;
-    item.status = item.status === 'active' ? 'inactive' : 'active';
-    item.updatedAt = new Date().toISOString();
-    return true;
+    // Maintenance rooms toggle back to active; active/inactive flip.
+    const next = item.status === 'active' ? 'inactive' : 'active';
+    try {
+      await apiFetch(`/api/rooms/${encodeURIComponent(id)}/status`, {
+        method: 'PATCH',
+        body: { status: next },
+      });
+      return true;
+    } catch {
+      return false;
+    }
   }
 }
 

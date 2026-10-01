@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Trash2 } from 'lucide-react';
 import { roomService } from '@/services/roomService';
 import { roomTypeService } from '@/services/roomTypeService';
+import type { RoomType } from '@/types/auth.types';
 import { Input } from './Input';
 import { Select } from './Select';
 import { Button } from './Button';
@@ -10,6 +11,7 @@ import { ConfirmDialog } from './ConfirmDialog';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
+import { apiErrorMessage } from '@/services/api';
 
 const roomSchema = z.object({
   roomNumber: z.string().min(1, 'Room number is required'),
@@ -30,41 +32,78 @@ export function RoomForm({ id, onSuccess, onCancel }: RoomFormProps) {
   const typeService = roomTypeService;
   const isEdit = !!id;
   const [loading, setLoading] = useState(false);
+  const [fetching, setFetching] = useState(!!id);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [formError, setFormError] = useState('');
+  const [allTypes, setAllTypes] = useState<RoomType[]>([]);
 
-  const existingRoom = id ? service.getById(id) : undefined;
-  const allTypes = typeService.getAll();
-
-  const { register, handleSubmit, formState: { errors } } = useForm<RoomFormData>({
+  const { register, handleSubmit, reset, formState: { errors } } = useForm<RoomFormData>({
     resolver: zodResolver(roomSchema),
     defaultValues: {
-      roomNumber: existingRoom?.roomNumber || '',
-      roomTypeId: existingRoom?.roomTypeId || '',
-      status: existingRoom?.status || 'active',
+      roomNumber: '',
+      roomTypeId: '',
+      status: 'active',
     },
   });
 
+  useEffect(() => {
+    let cancelled = false;
+    typeService.getAll().then((t) => {
+      if (!cancelled) setAllTypes(t);
+    }).catch(() => {
+      if (!cancelled) setAllTypes([]);
+    });
+    if (!id) {
+      setFetching(false);
+      return;
+    }
+    setFetching(true);
+    service.getById(id).then((existingRoom) => {
+      if (cancelled) return;
+      if (existingRoom) {
+        reset({
+          roomNumber: existingRoom.roomNumber || '',
+          roomTypeId: existingRoom.roomTypeId || '',
+          status: existingRoom.status || 'active',
+        });
+      }
+      setFetching(false);
+    }).catch(() => {
+      if (!cancelled) setFetching(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
   const onSubmit = async (data: RoomFormData) => {
     setLoading(true);
+    setFormError('');
     try {
       if (isEdit && id) {
-        service.update(id, data);
+        await service.update(id, data);
       } else {
-        service.create(data as any);
+        await service.create(data);
       }
       onSuccess();
+    } catch (err) {
+      setFormError(apiErrorMessage(err, 'Failed to save room'));
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (id) {
-      service.delete(id);
+      await service.delete(id);
       onSuccess();
     }
     setDeleteConfirm(false);
   };
+
+  if (fetching) {
+    return <p style={{ margin: 0, fontSize: '14px', color: '#6B7881' }}>Loading room...</p>;
+  }
 
   return (
     <>
@@ -99,6 +138,8 @@ export function RoomForm({ id, onSuccess, onCancel }: RoomFormProps) {
             />
           </div>
         </Card>
+
+        {formError && <p role="alert" style={{ margin: 0, fontSize: '13px', color: '#962222' }}>{formError}</p>}
 
         <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
           {isEdit && (

@@ -1,0 +1,16 @@
+# Local development only. NEVER commit real secrets.
+# Copy to `.dev.vars` for `wrangler dev` (wrangler reads `.dev.vars` automatically).
+# Production secrets must be set via `wrangler secret put <NAME>`.
+
+# HS256 signing secret for auth JWTs (min 32 random chars).
+# Generate: node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"
+JWT_SECRET=dev-only-insecure-secret-change-me-min-32-chars
+
+# Access token lifetime in seconds (default 3600 = 1h, matches frontend session UX).
+JWT_EXPIRES_IN=3600
+
+# Password-reset token lifetime in minutes.
+RESET_TOKEN_TTL_MIN=15
+
+# Comma-separated list of allowed frontend origins for CORS (no wildcard with credentials).
+FRONTEND_ORIGIN=http://localhost:5173

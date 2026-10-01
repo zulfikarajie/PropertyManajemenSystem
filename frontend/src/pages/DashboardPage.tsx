@@ -14,15 +14,13 @@ import {
   Wallet,
   X,
 } from 'lucide-react';
-import { reservationService } from '@/services/reservationService';
+import { reservationSourceLabels, reservationStatusLabels } from '@/constants/reservationStatuses';
 import { salesService } from '@/services/salesService';
 import { invoiceService } from '@/services/invoiceService';
-import { roomService } from '@/services/roomService';
 import { expenseService } from '@/services/expenseService';
+import { dashboardService, type DashboardOverview, type DashboardRecentReservation } from '@/services/dashboardService';
 import { Badge } from '@/components/shared/Badge';
 import { Table } from '@/components/shared/Table';
-import { reservationSourceLabels, reservationStatusLabels } from '@/constants/reservationStatuses';
-import type { Reservation } from '@/types/auth.types';
 import '../styles/dashboard-modern.css';
 import '../styles/reservation-list.css';
 
@@ -64,10 +62,24 @@ function useCountUp(target: number, format: (n: number) => string, duration = 80
 }
 
 export default function DashboardPage() {
-  const reservations = reservationService.getAll();
+  // Server-computed reservation + room aggregates (single overview call).
+  // Revenue/sales/invoice/expense sections intentionally stay on their
+  // existing mock services (Finance backend deferred).
+  const [overview, setOverview] = useState<DashboardOverview | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    dashboardService.getOverview().then((data) => {
+      if (!cancelled) setOverview(data);
+    }).catch(() => {
+      if (!cancelled) setOverview(null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const sales = salesService.getAll();
   const invoices = invoiceService.getAll();
-  const rooms = roomService.getAll();
   const expenses = expenseService.getAll();
 
   const [mounted, setMounted] = useState(false);
@@ -101,27 +113,32 @@ export default function DashboardPage() {
     };
   }, [revenueFilterOpen]);
 
-  const today = '2026-09-15';
+  // Real "today" (server UTC day); replaces the hardcoded '2026-09-15'.
+  // Falls back to the identical client-side UTC computation while loading.
+  const today = overview?.today ?? new Date().toISOString().slice(0, 10);
+  const monthPrefix = today.slice(0, 7);
 
-  const todayReservations = useMemo(() => reservations.filter((r) => r.checkInDate === today), [reservations]);
-  const checkedInReservations = useMemo(() => reservations.filter((r) => r.status === 'checked-in'), [reservations]);
-  const upcomingReservations = useMemo(() => reservations.filter((r) => r.checkInDate > today && r.status !== 'cancelled'), [reservations]);
-  const recentReservations = useMemo(() => [...reservations].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5), [reservations]);
+  const todayCheckins = overview?.reservations.todayCheckins ?? 0;
+  const checkedInCount = overview?.reservations.checkedIn ?? 0;
+  const upcomingCount = overview?.reservations.upcoming ?? 0;
+  const recentReservations = overview?.recent ?? [];
+  const totalReservations = overview?.reservations.total ?? 0;
 
-  const todaySales = useMemo(() => sales.filter((s) => s.date === today).reduce((sum, s) => sum + s.amount, 0), [sales]);
-  const monthSales = useMemo(() => sales.filter((s) => s.date.startsWith('2026-09')).reduce((sum, s) => sum + s.amount, 0), [sales]);
+  const todaySales = useMemo(() => sales.filter((s) => s.date === today).reduce((sum, s) => sum + s.amount, 0), [sales, today]);
+  const monthSales = useMemo(() => sales.filter((s) => s.date.startsWith(monthPrefix)).reduce((sum, s) => sum + s.amount, 0), [sales, monthPrefix]);
 
   const pendingInvoices = invoices.filter((inv) => inv.invoiceStatus === 'Draft').length;
   const overdueInvoices = invoices.filter((inv) => inv.paymentStatus === 'Overdue').length;
   const paidInvoices = invoices.filter((inv) => inv.invoiceStatus === 'Completed').length;
-  const totalReservations = reservations.length;
 
-  const activeRooms = rooms.filter((r) => r.status === 'active').length;
-  const totalRooms = rooms.length;
-  const occupancyRate = totalRooms > 0 ? Math.round((checkedInReservations.length / totalRooms) * 100) : 0;
+  const activeRooms = overview?.rooms.active ?? 0;
+  const totalRooms = overview?.rooms.total ?? 0;
+  const maintenanceRooms = overview?.rooms.maintenance ?? 0;
+  const inactiveRooms = overview?.rooms.inactive ?? 0;
+  const occupancyRate = overview?.occupancy.rate ?? 0;
 
   const revenueBuckets = useMemo(() => {
-    const todayDate = new Date('2026-09-15');
+    const todayDate = new Date(today);
     const sumByDate = (items: Array<{ date: string; amount: number }>, date: string) =>
       items.filter((i) => i.date === date).reduce((sum, i) => sum + i.amount, 0);
 
@@ -147,11 +164,11 @@ export default function DashboardPage() {
       const weekOf = (day: number) => (day <= 7 ? 0 : day <= 14 ? 1 : day <= 21 ? 2 : 3);
       sales.forEach((s) => {
         const d = new Date(s.date).getDate();
-        if (!Number.isNaN(d) && s.date.startsWith('2026-09')) earn[weekOf(d)] += s.amount;
+        if (!Number.isNaN(d) && s.date.startsWith(monthPrefix)) earn[weekOf(d)] += s.amount;
       });
       expenses.forEach((e) => {
         const d = new Date(e.date).getDate();
-        if (!Number.isNaN(d) && e.date.startsWith('2026-09')) exp[weekOf(d)] += e.amount;
+        if (!Number.isNaN(d) && e.date.startsWith(monthPrefix)) exp[weekOf(d)] += e.amount;
       });
       return { labels, earn, exp };
     }
@@ -186,7 +203,7 @@ export default function DashboardPage() {
       if (m > 12) { m = 1; y++; }
     }
     return { labels, earn, exp };
-  }, [revenueMode, sales, expenses, revenueMonthStart, revenueMonthEnd]);
+  }, [revenueMode, sales, expenses, revenueMonthStart, revenueMonthEnd, today, monthPrefix]);
 
   const revenueMax = Math.max(1, ...revenueBuckets.earn, ...revenueBuckets.exp);
   const revenueTotalEarn = revenueBuckets.earn.reduce((a, b) => a + b, 0);
@@ -202,9 +219,9 @@ export default function DashboardPage() {
     return defs.map((d) => ({
       ...d,
       label: reservationStatusLabels[d.key] || d.key,
-      count: reservations.filter((r) => r.status === d.key).length,
+      count: overview?.reservations.byStatus[d.key as keyof DashboardOverview['reservations']['byStatus']] ?? 0,
     }));
-  }, [reservations]);
+  }, [overview]);
 
   const animTodaySales = useCountUp(todaySales, formatCurrency);
   const animMonthSales = useCountUp(monthSales, formatCurrency);
@@ -214,21 +231,21 @@ export default function DashboardPage() {
   const animOverdue = useCountUp(overdueInvoices, String);
 
   const stats = [
-    { key: 'checkin', label: 'Check-in Hari Ini', value: String(todayReservations.length), sub: `${upcomingReservations.length} upcoming`, icon: CalendarCheck, to: '/dashboard/reservations' },
-    { key: 'active', label: 'Reservasi Aktif', value: String(checkedInReservations.length), sub: `${totalReservations} total`, icon: BedDouble, to: '/dashboard/reservations' },
+    { key: 'checkin', label: 'Check-in Hari Ini', value: String(todayCheckins), sub: `${upcomingCount} upcoming`, icon: CalendarCheck, to: '/dashboard/reservations' },
+    { key: 'active', label: 'Reservasi Aktif', value: String(checkedInCount), sub: `${totalReservations} total`, icon: BedDouble, to: '/dashboard/reservations' },
     { key: 'revenue', label: 'Omzet Hari Ini', value: animTodaySales, sub: `Bulan ini: ${animMonthSales}`, icon: Wallet, to: '/dashboard/finance/sales' },
     { key: 'invoice', label: 'Invoice Tertunda', value: animPending, sub: `${overdueInvoices} overdue`, icon: FileWarning, to: '/dashboard/finance/invoices' },
-    { key: 'occupancy', label: 'Okupansi', value: animOccupancy, sub: `${checkedInReservations.length} dari ${totalRooms} kamar`, icon: LayoutDashboard, to: '/dashboard/rooms' },
+    { key: 'occupancy', label: 'Okupansi', value: animOccupancy, sub: `${checkedInCount} dari ${totalRooms} kamar`, icon: LayoutDashboard, to: '/dashboard/rooms' },
     { key: 'total', label: 'Total Reservasi', value: String(totalReservations), sub: `${paidInvoices} invoice lunas`, icon: Receipt, to: '/dashboard/reservations' },
   ];
 
   const columns = [
-    { key: 'reservationCode', header: 'Kode', render: (item: Reservation) => <Link to={`/dashboard/reservations/${item.id}`} style={{ color: '#97764D', fontWeight: 600, textDecoration: 'none' }}>{item.reservationCode}</Link> },
-    { key: 'guestName', header: 'Tamu', render: (item: Reservation) => item.guestName },
-    { key: 'source', header: 'Sumber', render: (item: Reservation) => <Badge variant="default">{reservationSourceLabels[item.source] || item.source}</Badge> },
-    { key: 'checkInDate', header: 'Check-in', render: (item: Reservation) => formatDate(item.checkInDate) },
-    { key: 'status', header: 'Status', render: (item: Reservation) => <Badge variant={item.status === 'checked-in' ? 'success' : item.status === 'reserved' ? 'warning' : item.status === 'cancelled' ? 'danger' : 'default'}>{reservationStatusLabels[item.status]}</Badge> },
-    { key: 'totalAmount', header: 'Total', render: (item: Reservation) => formatCurrency(item.totalAmount) },
+    { key: 'reservationCode', header: 'Kode', render: (item: DashboardRecentReservation) => <Link to={`/dashboard/reservations/${item.id}`} style={{ color: '#97764D', fontWeight: 600, textDecoration: 'none' }}>{item.reservationCode}</Link> },
+    { key: 'guestName', header: 'Tamu', render: (item: DashboardRecentReservation) => item.guestName },
+    { key: 'source', header: 'Sumber', render: (item: DashboardRecentReservation) => <Badge variant="default">{reservationSourceLabels[item.source] || item.source}</Badge> },
+    { key: 'checkInDate', header: 'Check-in', render: (item: DashboardRecentReservation) => formatDate(item.checkInDate) },
+    { key: 'status', header: 'Status', render: (item: DashboardRecentReservation) => <Badge variant={item.status === 'checked-in' ? 'success' : item.status === 'reserved' ? 'warning' : item.status === 'cancelled' ? 'danger' : 'default'}>{reservationStatusLabels[item.status]}</Badge> },
+    { key: 'totalAmount', header: 'Total', render: (item: DashboardRecentReservation) => formatCurrency(item.totalAmount) },
   ];
 
   const donutR = 54;
@@ -484,20 +501,20 @@ export default function DashboardPage() {
             <span className="dm-occupancy-hero__pct--sm">{animOccupancy}</span>
             <div>
               <div style={{ color: '#232D36', fontWeight: 600, fontSize: '13px' }}>Kamar Terisi</div>
-              <div style={{ color: '#6B7881', fontSize: '13px' }}>{checkedInReservations.length} dari {totalRooms} kamar</div>
+              <div style={{ color: '#6B7881', fontSize: '13px' }}>{checkedInCount} dari {totalRooms} kamar</div>
             </div>
           </div>
           <div
             className="dm-meter"
             role="img"
-            aria-label={`Okupansi ${occupancyRate} persen, ${checkedInReservations.length} dari ${totalRooms} kamar terisi.`}
+            aria-label={`Okupansi ${occupancyRate} persen, ${checkedInCount} dari ${totalRooms} kamar terisi.`}
           >
             <div className="dm-meter__fill" style={{ width: mounted ? `${occupancyRate}%` : '0%', backgroundColor: '#97764D' }} />
           </div>
           <div className="dm-occupancy-meta">
             <span>Aktif: {activeRooms}</span>
-            <span>Maintenance: {rooms.filter((r) => r.status === 'maintenance').length}</span>
-            <span>Inactive: {rooms.filter((r) => r.status === 'inactive').length}</span>
+            <span>Maintenance: {maintenanceRooms}</span>
+            <span>Inactive: {inactiveRooms}</span>
           </div>
         </section>
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { roomTypeService } from '@/services/roomTypeService';
 import { Input } from './Input';
 import { Select } from './Select';
@@ -8,6 +8,7 @@ import { ConfirmDialog } from './ConfirmDialog';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
+import { apiErrorMessage } from '@/services/api';
 
 const roomTypeSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -30,48 +31,89 @@ export function RoomTypeForm({ id, onSuccess, onCancel }: RoomTypeFormProps) {
   const service = roomTypeService;
   const isEdit = !!id;
   const [loading, setLoading] = useState(false);
+  const [fetching, setFetching] = useState(!!id);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [formError, setFormError] = useState('');
 
-  const existingType = id ? service.getById(id) : undefined;
-
-  const { register, handleSubmit, formState: { errors } } = useForm<RoomTypeFormData>({
+  const { register, handleSubmit, reset, formState: { errors } } = useForm<RoomTypeFormData>({
     resolver: zodResolver(roomTypeSchema),
     defaultValues: {
-      name: existingType?.name || '',
-      description: existingType?.description || '',
-      capacity: existingType?.capacity || 1,
-      defaultRate: existingType?.defaultRate || 0,
-      facilities: existingType?.facilities?.join(', ') || '',
-      status: existingType?.status || 'active',
+      name: '',
+      description: '',
+      capacity: 1,
+      defaultRate: 0,
+      facilities: '',
+      status: 'active',
     },
   });
 
+  useEffect(() => {
+    let cancelled = false;
+    if (!id) {
+      setFetching(false);
+      return;
+    }
+    setFetching(true);
+    service.getById(id).then((existingType) => {
+      if (cancelled) return;
+      if (existingType) {
+        reset({
+          name: existingType.name || '',
+          description: existingType.description || '',
+          capacity: existingType.capacity || 1,
+          defaultRate: existingType.defaultRate || 0,
+          facilities: existingType.facilities?.join(', ') || '',
+          status: existingType.status || 'active',
+        });
+      }
+      setFetching(false);
+    }).catch(() => {
+      if (!cancelled) setFetching(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
   const onSubmit = async (data: RoomTypeFormData) => {
     setLoading(true);
+    setFormError('');
     try {
       const facilities = data.facilities.split(',').map((s) => s.trim()).filter(Boolean);
       if (isEdit && id) {
-        service.update(id, { ...data, facilities });
+        await service.update(id, { ...data, facilities });
       } else {
-        service.create({
-          ...data,
+        // Create-path fix: send the parsed facilities array (not the raw
+        // comma string) so the API receives string[] as validated.
+        await service.create({
+          name: data.name,
+          description: data.description,
+          capacity: Number(data.capacity),
+          defaultRate: Number(data.defaultRate),
+          facilities,
           images: [],
           status: data.status,
-        } as any);
+        });
       }
       onSuccess();
+    } catch (err) {
+      setFormError(apiErrorMessage(err, 'Failed to save room type'));
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (id) {
-      service.delete(id);
+      await service.delete(id);
       onSuccess();
     }
     setDeleteConfirm(false);
   };
+
+  if (fetching) {
+    return <p style={{ margin: 0, fontSize: '14px', color: '#6B7881' }}>Loading room type...</p>;
+  }
 
   return (
     <>
@@ -121,6 +163,8 @@ export function RoomTypeForm({ id, onSuccess, onCancel }: RoomTypeFormProps) {
             />
           </div>
         </Card>
+
+        {formError && <p role="alert" style={{ margin: 0, fontSize: '13px', color: '#962222' }}>{formError}</p>}
 
         <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
           {isEdit && (

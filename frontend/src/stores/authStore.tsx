@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
 import authService from '../services/authService';
+import { apiErrorMessage } from '../services/api';
 
 interface AuthState {
   user: any | null;
@@ -18,7 +19,7 @@ type AuthAction =
 
 interface AuthContextType extends AuthState {
   login: (email: string, password: string) => Promise<boolean>;
-  logout: () => void;
+  logout: () => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<boolean>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<boolean>;
   error: string;
@@ -54,49 +55,56 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   });
 
   useEffect(() => {
-    const session = authService.restoreSession();
-    if (session) {
-      dispatch({ type: 'LOGIN_SUCCESS', payload: session });
-    } else {
-      dispatch({ type: 'SET_LOADING', payload: false });
-    }
+    let cancelled = false;
+    // Session restore is verified against the backend (GET /api/auth/me).
+    authService.restoreSession().then((session) => {
+      if (cancelled) return;
+      if (session) {
+        dispatch({ type: 'LOGIN_SUCCESS', payload: session });
+      } else {
+        dispatch({ type: 'SET_LOADING', payload: false });
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const login = async (email: string, password: string): Promise<boolean> => {
     dispatch({ type: 'SET_LOADING', payload: true });
     try {
-      const result = authService.login(email, password);
+      const result = await authService.login(email, password);
       if (result) {
         dispatch({ type: 'LOGIN_SUCCESS', payload: result });
         return true;
       }
       dispatch({ type: 'LOGIN_FAILURE', payload: 'Invalid email or password' });
       return false;
-    } catch {
-      dispatch({ type: 'LOGIN_FAILURE', payload: 'An error occurred during login' });
+    } catch (err) {
+      dispatch({ type: 'LOGIN_FAILURE', payload: apiErrorMessage(err, 'An error occurred during login') });
       return false;
     } finally {
       dispatch({ type: 'SET_LOADING', payload: false });
     }
   };
 
-  const logout = () => {
-    authService.logout();
+  const logout = async () => {
+    await authService.logout();
     dispatch({ type: 'LOGOUT' });
   };
 
   const register = async (name: string, email: string, password: string): Promise<boolean> => {
     dispatch({ type: 'SET_LOADING', payload: true });
     try {
-      const result = authService.register({ name, email, password });
+      const result = await authService.register({ name, email, password });
       if (result) {
-        dispatch({ type: 'REGISTER_SUCCESS', payload: result });
+        dispatch({ type: 'REGISTER_SUCCESS', payload: result.user });
         return true;
       }
       dispatch({ type: 'SET_ERROR', payload: 'Email already registered' });
       return false;
-    } catch {
-      dispatch({ type: 'SET_ERROR', payload: 'Registration failed' });
+    } catch (err) {
+      dispatch({ type: 'SET_ERROR', payload: apiErrorMessage(err, 'Registration failed') });
       return false;
     } finally {
       dispatch({ type: 'SET_LOADING', payload: false });
@@ -105,7 +113,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const changePassword = async (currentPassword: string, newPassword: string): Promise<boolean> => {
     try {
-      const success = authService.changePassword(
+      const success = await authService.changePassword(
         state.user?.id || '',
         currentPassword,
         newPassword

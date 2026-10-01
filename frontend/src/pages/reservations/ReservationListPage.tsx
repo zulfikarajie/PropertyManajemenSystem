@@ -217,12 +217,47 @@ export default function ReservationListPage() {
     daftarRef.current?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
   };
 
-  const reservations = service.getAll();
+  const [reservations, setReservations] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [allRooms, setAllRooms] = useState<Array<{ id: string; roomNumber: string; roomTypeId: string }>>([]);
+  const [allTypes, setAllTypes] = useState<Array<{ id: string; name: string }>>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setIsLoading(true);
+    setLoadError('');
+    service.getAll().then((rows) => {
+      if (!cancelled) {
+        setReservations(rows);
+        setIsLoading(false);
+      }
+    }).catch(() => {
+      if (!cancelled) {
+        setLoadError('Failed to load reservations');
+        setIsLoading(false);
+      }
+    });
+    roomService.getAll().then((rows) => {
+      if (!cancelled) setAllRooms(rows);
+    }).catch(() => {
+      if (!cancelled) setAllRooms([]);
+    });
+    roomTypeService.getAll().then((rows) => {
+      if (!cancelled) setAllTypes(rows);
+    }).catch(() => {
+      if (!cancelled) setAllTypes([]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [showForm, service]);
   const invoiceByReservationId = useMemo(() => {
     return new Map(invoiceService.getAll().map((inv) => [inv.reservationId, inv]));
   }, []);
 
   const filteredReservations = useMemo(() => {
+    const roomTypeByRoomId = new Map(allRooms.map((r) => [r.id, r.roomTypeId]));
     return reservations.filter((r) => {
       if (applied.source !== 'all' && r.source !== applied.source) return false;
       if (applied.status !== 'all' && r.status !== applied.status) return false;
@@ -232,8 +267,8 @@ export default function ReservationListPage() {
         r.reservationCode.toLowerCase().includes(search.toLowerCase());
       if (!matchesSearch) return false;
       if (applied.roomType !== 'all') {
-        const rooms = service.getRoomsByReservationId(r.id);
-        const hasType = rooms.some((room) => roomService.getById(room.roomId)?.roomTypeId === applied.roomType);
+        const rooms = (r as any).rooms ?? [];
+        const hasType = rooms.some((room: any) => roomTypeByRoomId.get(room.roomId) === applied.roomType);
         if (!hasType) return false;
       }
       if (applied.payment !== 'all') {
@@ -242,7 +277,7 @@ export default function ReservationListPage() {
       }
       return true;
     });
-  }, [reservations, applied, search, quickRange, quickMonth, service, invoiceByReservationId]);
+  }, [reservations, applied, search, quickRange, quickMonth, service, invoiceByReservationId, allRooms]);
 
   const monthOptions = useMemo(() => {
     const months = new Set<string>();
@@ -285,7 +320,7 @@ export default function ReservationListPage() {
     if (key === 'source') return filters.source === 'all' ? '' : (reservationSourceLabels[filters.source] || filters.source);
     if (key === 'roomType') {
       if (filters.roomType === 'all') return '';
-      return roomTypeService.getById(filters.roomType)?.name || '';
+      return allTypes.find((t) => t.id === filters.roomType)?.name || '';
     }
     if (key === 'date') return filters.date;
     return filters.payment === 'all' ? '' : filters.payment;
@@ -310,7 +345,7 @@ export default function ReservationListPage() {
     if (key === 'roomType') {
       return [
         { value: 'all', label: 'All Room Types' },
-        ...roomTypeService.getAll().map((rt) => ({ value: rt.id, label: rt.name })),
+        ...allTypes.map((rt) => ({ value: rt.id, label: rt.name })),
       ];
     }
     return [
@@ -558,15 +593,17 @@ export default function ReservationListPage() {
         {activeFilterCount > 0 ? ` · ${activeFilterCount} filter${activeFilterCount === 1 ? '' : 's'} active` : ''}
       </p>
 
+      {loadError && <div role="alert" style={{ color: '#C85C5C', fontSize: '14px', marginBottom: '12px' }}>{loadError}</div>}
+
       <div className="res-list">
         {visibleReservations.map((reservation) => {
-          const rooms = service.getRoomsByReservationId(reservation.id);
+          const rooms = (reservation as any).rooms ?? [];
           return (
             <ReservationCard
               key={reservation.id}
               reservation={{
                 ...reservation,
-                rooms: rooms.map((r) => ({ roomNumber: r.roomNumber, roomTypeName: r.roomTypeName })),
+                rooms: rooms.map((r: any) => ({ roomNumber: r.roomNumber, roomTypeName: r.roomTypeName })),
                 paymentStatus: invoiceByReservationId.get(reservation.id)?.paymentStatus,
               }}
             />
@@ -576,7 +613,7 @@ export default function ReservationListPage() {
 
       {filteredReservations.length === 0 && (
         <Card style={{ textAlign: 'center', padding: '40px' }}>
-          <p style={{ color: '#6B7881', fontSize: '14px' }}>No reservations found</p>
+          <p style={{ color: '#6B7881', fontSize: '14px' }}>{isLoading ? 'Loading reservations...' : 'No reservations found'}</p>
         </Card>
       )}
 

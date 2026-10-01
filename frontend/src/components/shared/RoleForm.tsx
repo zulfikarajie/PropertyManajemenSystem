@@ -3,6 +3,7 @@ import { Button } from './Button';
 import { Input } from './Input';
 import roleService from '@/services/roleService';
 import permissionService from '@/services/permissionService';
+import { apiErrorMessage } from '@/services/api';
 
 interface RoleFormProps {
   id?: string;
@@ -14,14 +15,40 @@ export function RoleForm({ id, onSuccess, onCancel }: RoleFormProps) {
   const isEdit = !!id;
   const [formData, setFormData] = useState({ name: '', description: '', permissions: [] as string[] });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [serverError, setServerError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const permissions = permissionService.getAll();
+  const [isLoading, setIsLoading] = useState(!!id);
+  const [permissions, setPermissions] = useState<any[]>([]);
 
   useEffect(() => {
-    if (id) {
-      const role = roleService.getById(id);
+    let cancelled = false;
+    permissionService.getAll().then((p) => {
+      if (!cancelled) setPermissions(p);
+    }).catch(() => {
+      if (!cancelled) setServerError('Failed to load permissions');
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    setIsLoading(true);
+    roleService.getById(id).then((role) => {
+      if (cancelled) return;
       if (role) setFormData({ name: role.name, description: role.description, permissions: role.permissions || [] });
-    }
+      setIsLoading(false);
+    }).catch(() => {
+      if (!cancelled) {
+        setServerError('Failed to load role');
+        setIsLoading(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
   const validate = (): boolean => {
@@ -36,15 +63,19 @@ export function RoleForm({ id, onSuccess, onCancel }: RoleFormProps) {
     e.preventDefault();
     if (!validate()) return;
     setIsSubmitting(true);
+    setServerError('');
     try {
       const data = { ...formData, status: 'active' as const };
       if (isEdit && id) {
-        const result = roleService.update(id, data);
+        const result = await roleService.update(id, data);
         if (result) onSuccess();
+        else setServerError('Failed to update role');
       } else {
-        const result = roleService.create(data);
+        const result = await roleService.create(data);
         if (result) onSuccess();
       }
+    } catch (err) {
+      setServerError(apiErrorMessage(err, 'Failed to save role'));
     } finally {
       setIsSubmitting(false);
     }
@@ -59,8 +90,13 @@ export function RoleForm({ id, onSuccess, onCancel }: RoleFormProps) {
     }));
   };
 
+  if (isLoading) {
+    return <p style={{ color: '#6B7881', fontSize: '14px' }}>Loading role...</p>;
+  }
+
   return (
     <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md, 12px)' }}>
+      {serverError && <div role="alert" style={{ color: '#C85C5C', fontSize: '13px' }}>{serverError}</div>}
       <div>
         <label style={{ display: 'block', fontSize: 'var(--font-size-body, 14px)', fontWeight: 500, marginBottom: 'var(--space-xs, 4px)', color: '#232D36' }}>Role Name</label>
         <Input value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder="e.g., Manager" errorMessage={errors.name} />

@@ -1,4 +1,5 @@
-import { reservationService } from '@/services/reservationService';
+import { useEffect, useState } from 'react';
+import { reservationService, type ApiReservation } from '@/services/reservationService';
 import { reservationSourceLabels } from '@/constants/reservationStatuses';
 import type { Invoice } from '@/types/auth.types';
 
@@ -18,8 +19,26 @@ function formatIDR(value: number): string {
  * are intentionally omitted rather than fabricated.
  */
 export function InvoicePrintDocument({ invoice }: InvoicePrintDocumentProps) {
-  const reservation = invoice.reservationId ? reservationService.getById(invoice.reservationId) : undefined;
-  const rooms = invoice.reservationId ? reservationService.getRoomsByReservationId(invoice.reservationId) : [];
+  const [linked, setLinked] = useState<ApiReservation | null>(null);
+
+  useEffect(() => {
+    if (!invoice.reservationId) {
+      setLinked(null);
+      return;
+    }
+    let cancelled = false;
+    reservationService.getFullById(invoice.reservationId).then((r) => {
+      if (!cancelled) setLinked(r ?? null);
+    }).catch(() => {
+      if (!cancelled) setLinked(null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [invoice.reservationId]);
+
+  const reservation = linked ?? undefined;
+  const rooms = linked?.rooms ?? [];
   const generatedAt = new Date().toLocaleString('en-GB', {
     day: 'numeric',
     month: 'long',

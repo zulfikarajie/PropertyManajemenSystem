@@ -73,8 +73,8 @@ test.describe('SCN-03 Dashboard + SCN-09 cross-cutting', () => {
       const resp = await page.goto(url);
       // RequirePermission may render "Akses Ditolak" but HTTP is still 200 (SPA)
       expect(resp?.status(), url).toBe(200);
-      const body = await page.locator('body').innerText();
-      expect(body.trim().length, `${url} blank`).toBeGreaterThan(0);
+      // Lazy route chunks render after load — poll until the page has real text.
+      await expect.poll(async () => (await page.locator('body').innerText()).trim().length, `${url} blank`).toBeGreaterThan(0);
     }
   });
 

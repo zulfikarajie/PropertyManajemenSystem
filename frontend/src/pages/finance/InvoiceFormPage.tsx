@@ -12,6 +12,7 @@ export default function InvoiceFormPage() {
   const { id } = useParams<{ id: string }>();
   const isEdit = !!id && id !== 'new';
   const [reservationId, setReservationId] = useState('');
+  const [reservationCode, setReservationCode] = useState('');
   const [initialSource, setInitialSource] = useState('');
   const [initialGuest, setInitialGuest] = useState('');
   const [initialItems, setInitialItems] = useState<any[]>([]);
@@ -28,12 +29,14 @@ export default function InvoiceFormPage() {
         setInitialTotal(invoice.total);
       }
     } else if (!isEdit && id) {
-      const reservation = reservationService.getById(id);
-      if (reservation) {
+      let cancelled = false;
+      reservationService.getFullById(id).then((reservation) => {
+        if (cancelled || !reservation) return;
         setReservationId(reservation.id);
+        setReservationCode(reservation.reservationCode);
         setInitialSource(reservation.source);
         setInitialGuest(reservation.guestName);
-        const rooms = reservationService.getReservationRooms(id);
+        const rooms = reservation.rooms ?? [];
         const items = rooms.map((room) => ({
           description: `${room.roomNumber} - ${room.roomTypeName}`,
           quantity: 1,
@@ -42,7 +45,10 @@ export default function InvoiceFormPage() {
         }));
         setInitialItems(items);
         setInitialTotal(reservation.totalAmount);
-      }
+      }).catch(() => {});
+      return () => {
+        cancelled = true;
+      };
     }
   }, [isEdit, id]);
 
@@ -86,7 +92,7 @@ export default function InvoiceFormPage() {
       {id && !isEdit && reservationId && (
         <Card style={{ marginBottom: '16px', backgroundColor: '#F2F0EB' }}>
           <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', fontSize: '14px', color: '#232D36' }}>
-            <span><strong>Reservation:</strong> {reservationService.getById(id)?.reservationCode}</span>
+            <span><strong>Reservation:</strong> {reservationCode || id}</span>
             <span><strong>Guest:</strong> {initialGuest}</span>
             <span><strong>Source:</strong> {reservationSourceLabels[initialSource] || initialSource}</span>
             <span><strong>Total:</strong> {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(initialTotal)}</span>

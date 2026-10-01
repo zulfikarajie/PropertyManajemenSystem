@@ -20,8 +20,8 @@ const createInvoiceSchema = z.object({
     unitPrice: z.number().min(0, 'Unit price must be at least 0'),
   })).min(1, 'At least one item is required'),
   discount: z.number().min(0, 'Discount must be at least 0').max(100, 'Discount cannot exceed 100%'),
-  invoiceStatus: z.enum(['Draft', 'Completed']),
-  paymentStatus: z.enum(['Pending', 'Paid']),
+  invoiceStatus: z.enum(['Draft', 'Sent', 'Completed', 'Cancelled']),
+  paymentStatus: z.enum(['Pending', 'Paid', 'Overdue', 'Partial']),
 });
 
 type CreateInvoiceFormData = z.infer<typeof createInvoiceSchema>;

@@ -29,12 +29,18 @@ export function PermissionProvider({ children }: { children: React.ReactNode }) 
   const { user } = useAuth();
 
   useEffect(() => {
+    let cancelled = false;
     if (user?.id) {
-      const permissions = authService.getUserPermissions(user.id);
-      dispatch({ type: 'SET_PERMISSIONS', payload: permissions });
+      // Effective permissions are resolved server-side from the user's roles.
+      authService.getMyPermissions().then((permissions) => {
+        if (!cancelled) dispatch({ type: 'SET_PERMISSIONS', payload: permissions });
+      });
     } else {
       dispatch({ type: 'SET_PERMISSIONS', payload: [] });
     }
+    return () => {
+      cancelled = true;
+    };
   }, [user]);
 
   const hasPermission = (permission: string) => {

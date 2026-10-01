@@ -1,45 +1,58 @@
-import activitiesData from '../data/mock/activities.json';
+import { apiFetch } from './api';
 import type { Activity } from '@/types/auth.types';
 
+interface ListResponse {
+  data: Activity[];
+  pagination: { page: number; pageSize: number; total: number };
+}
+
+/**
+ * Activity audit-log client backed by the real API (`/api/activities`).
+ * Async — call sites use `useEffect` + state. Names match the previous
+ * mock-backed service. The log is append-only and server-generated: there is
+ * no `create` method (no write endpoint exists), so the frontend can never
+ * fabricate audit records.
+ */
 class ActivityService {
-  private data: Activity[] = [...activitiesData as Activity[]];
-
-  getAll(): Activity[] {
-    return this.data.map((item) => ({ ...item }));
+  async getAll(): Promise<Activity[]> {
+    const json = await apiFetch<ListResponse>('/api/activities?page=1&pageSize=100');
+    return json.data;
   }
 
-  getById(id: string): Activity | undefined {
-    return this.data.find((item) => item.id === id);
+  async getById(id: string): Promise<Activity | undefined> {
+    try {
+      const json = await apiFetch<{ data: Activity }>(`/api/activities/${encodeURIComponent(id)}`);
+      return json.data;
+    } catch {
+      return undefined;
+    }
   }
 
-  getByCategory(category: string): Activity[] {
-    return this.data.filter((item) => item.category === category);
+  async getByCategory(category: string): Promise<Activity[]> {
+    const json = await apiFetch<ListResponse>(
+      `/api/activities?category=${encodeURIComponent(category)}&page=1&pageSize=100`,
+    );
+    return json.data;
   }
 
-  getByUser(userId: string): Activity[] {
-    return this.data.filter((item) => item.userId === userId);
+  async getByUser(userId: string): Promise<Activity[]> {
+    const json = await apiFetch<ListResponse>(
+      `/api/activities?userId=${encodeURIComponent(userId)}&page=1&pageSize=100`,
+    );
+    return json.data;
   }
 
-  getByDateRange(startDate: string, endDate: string): Activity[] {
-    return this.data.filter((item) => {
+  async getByDateRange(startDate: string, endDate: string): Promise<Activity[]> {
+    const all = await this.getAll();
+    return all.filter((item) => {
       const date = new Date(item.createdAt);
       return date >= new Date(startDate) && date <= new Date(endDate);
     });
   }
 
-  getRecent(limit = 20): Activity[] {
-    return this.data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, limit);
-  }
-
-  create(data: Omit<Activity, 'id' | 'createdAt'>): Activity {
-    const now = new Date().toISOString();
-    const newItem: Activity = {
-      ...data,
-      id: `act-${String(this.data.length + 1).padStart(3, '0')}`,
-      createdAt: now,
-    };
-    this.data.push(newItem);
-    return { ...newItem };
+  async getRecent(limit = 20): Promise<Activity[]> {
+    const json = await apiFetch<ListResponse>(`/api/activities?page=1&pageSize=${limit}`);
+    return json.data.slice(0, limit);
   }
 }
 

@@ -1,49 +1,76 @@
-import roomTypesData from '../data/mock/roomTypes.json';
+import { apiFetch } from './api';
 import type { RoomType } from '@/types/auth.types';
 
+export interface RoomTypePayload {
+  name: string;
+  description: string;
+  capacity: number;
+  facilities?: string[];
+  defaultRate: number;
+  images?: string[];
+  status?: 'active' | 'inactive';
+}
+
+/**
+ * Room-type client backed by the real API (`/api/room-types`).
+ * Async — call sites use `useEffect` + state. Names match the previous
+ * mock-backed service. Server `search/status/pagination` params exist but
+ * lists still filter client-side (capped at 100 rows, Phase-1 scale).
+ */
 class RoomTypeService {
-  private data: RoomType[] = [...roomTypesData as RoomType[]];
-
-  getAll(): RoomType[] {
-    return this.data.map((item) => ({ ...item }));
+  async getAll(): Promise<RoomType[]> {
+    const json = await apiFetch<{ data: RoomType[] }>('/api/room-types?page=1&pageSize=100');
+    return json.data;
   }
 
-  getById(id: string): RoomType | undefined {
-    return this.data.find((item) => item.id === id);
+  async getById(id: string): Promise<RoomType | undefined> {
+    try {
+      const json = await apiFetch<{ data: RoomType }>(`/api/room-types/${encodeURIComponent(id)}`);
+      return json.data;
+    } catch {
+      return undefined;
+    }
   }
 
-  create(data: Omit<RoomType, 'id' | 'createdAt' | 'updatedAt'>): RoomType {
-    const now = new Date().toISOString();
-    const newItem: RoomType = {
-      ...data,
-      id: `room-type-${String(this.data.length + 1).padStart(3, '0')}`,
-      createdAt: now,
-      updatedAt: now,
-    };
-    this.data.push(newItem);
-    return { ...newItem };
+  async create(data: RoomTypePayload): Promise<RoomType> {
+    const json = await apiFetch<{ data: RoomType }>('/api/room-types', { method: 'POST', body: data });
+    return json.data;
   }
 
-  update(id: string, updates: Partial<RoomType>): RoomType | null {
-    const index = this.data.findIndex((item) => item.id === id);
-    if (index === -1) return null;
-    this.data[index] = { ...this.data[index], ...updates, updatedAt: new Date().toISOString() };
-    return { ...this.data[index] };
+  async update(id: string, updates: Partial<RoomTypePayload>): Promise<RoomType | null> {
+    try {
+      const json = await apiFetch<{ data: RoomType }>(`/api/room-types/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        body: updates,
+      });
+      return json.data;
+    } catch {
+      return null;
+    }
   }
 
-  delete(id: string): boolean {
-    const index = this.data.findIndex((item) => item.id === id);
-    if (index === -1) return false;
-    this.data.splice(index, 1);
-    return true;
+  async delete(id: string): Promise<boolean> {
+    try {
+      await apiFetch(`/api/room-types/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      return true;
+    } catch {
+      return false;
+    }
   }
 
-  toggleStatus(id: string): boolean {
-    const item = this.data.find((i) => i.id === id);
+  async toggleStatus(id: string): Promise<boolean> {
+    const item = await this.getById(id);
     if (!item) return false;
-    item.status = item.status === 'active' ? 'inactive' : 'active';
-    item.updatedAt = new Date().toISOString();
-    return true;
+    const next = item.status === 'active' ? 'inactive' : 'active';
+    try {
+      await apiFetch(`/api/room-types/${encodeURIComponent(id)}/status`, {
+        method: 'PATCH',
+        body: { status: next },
+      });
+      return true;
+    } catch {
+      return false;
+    }
   }
 }
 

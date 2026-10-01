@@ -16,8 +16,8 @@ export function CheckOutButton({ reservationId, currentStatus, guestName }: Chec
 
   if (currentStatus !== 'checked-in') return null;
 
-  const handleCheckOut = () => {
-    reservationService.checkOut(reservationId);
+  const handleCheckOut = async () => {
+    await reservationService.checkOut(reservationId);
     setConfirmOpen(false);
     navigate(0);
   };

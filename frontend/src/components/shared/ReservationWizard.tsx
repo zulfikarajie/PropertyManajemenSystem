@@ -97,14 +97,44 @@ export function ReservationWizard({ initialDraft, isEdit = false, excludeReserva
 
   const nightDates = useMemo(() => enumerateNights(draft.checkInDate, draft.checkOutDate), [draft.checkInDate, draft.checkOutDate]);
   const nights = nightDates.length;
-  const { referenceRate, roomTypeName } = useMemo(() => resolveReferenceRate(draft.roomIds), [draft.roomIds]);
+  const [allRooms, setAllRooms] = useState<Array<{ id: string; roomNumber: string; roomTypeId: string }>>([]);
+  const [allTypes, setAllTypes] = useState<Array<{ id: string; name: string; defaultRate: number }>>([]);
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([roomService.getAll(), roomTypeService.getAll()]).then(([r, t]) => {
+      if (!cancelled) {
+        setAllRooms(r);
+        setAllTypes(t);
+      }
+    }).catch(() => {
+      if (!cancelled) {
+        setAllRooms([]);
+        setAllTypes([]);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const roomById = useMemo(() => new Map(allRooms.map((r) => [r.id, r])), [allRooms]);
+  const typeById = useMemo(() => new Map(allTypes.map((t) => [t.id, t])), [allTypes]);
+  const { referenceRate, roomTypeName } = useMemo(
+    () => resolveReferenceRate(draft.roomIds, allRooms as never, allTypes as never),
+    [draft.roomIds, allRooms, allTypes],
+  );
   const calc = useMemo(() => calculatePricing({ ...draft.pricing }), [draft.pricing]);
   const pricingValidation = useMemo(() => validatePricing(draft.pricing), [draft.pricing]);
   const dirty = useMemo(() => isDraftDirty(draft, initialRef.current), [draft]);
-  const bookedIds = useMemo(
-    () => getBookedRoomIdsForRange(draft.checkInDate, draft.checkOutDate, excludeReservationId),
-    [draft.checkInDate, draft.checkOutDate, excludeReservationId],
-  );
+  const [bookedIds, setBookedIds] = useState<string[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    getBookedRoomIdsForRange(draft.checkInDate, draft.checkOutDate, excludeReservationId).then((ids) => {
+      if (!cancelled) setBookedIds(ids);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [draft.checkInDate, draft.checkOutDate, excludeReservationId]);
   const selectedBooked = useMemo(() => draft.roomIds.filter((id) => bookedIds.includes(id)), [draft.roomIds, bookedIds]);
 
   // Keep nightly rows in sync with dates without losing per-date edits.
@@ -250,7 +280,7 @@ export function ReservationWizard({ initialDraft, isEdit = false, excludeReserva
       }
       const roomErr = validateStep2(draft);
       if (selectedBooked.length > 0) {
-        setStep2Error(`Selected room(s) are booked for these dates: ${selectedBooked.map((id) => roomService.getById(id)?.roomNumber || id).join(', ')}. Deselect them to continue.`);
+        setStep2Error(`Selected room(s) are booked for these dates: ${selectedBooked.map((id) => roomById.get(id)?.roomNumber || id).join(', ')}. Deselect them to continue.`);
         focusSummary();
         return;
       }
@@ -296,14 +326,14 @@ export function ReservationWizard({ initialDraft, isEdit = false, excludeReserva
   };
 
   const selectedRoomLabels = draft.roomIds.map((id) => {
-    const room = roomService.getById(id);
-    const rt = room?.roomTypeId ? roomTypeService.getById(room.roomTypeId) : undefined;
+    const room = roomById.get(id);
+    const rt = room?.roomTypeId ? typeById.get(room.roomTypeId) : undefined;
     return { id, number: room?.roomNumber || id, type: rt?.name || '' };
   });
 
   const step1ErrorList = Object.entries(step1Errors).filter(([, v]) => !!v) as Array<[string, string]>;
   const showStep1Summary = step1ErrorList.length > 0;
-  const roomTypeOptions = roomTypeService.getAll().map((rt) => ({ value: rt.id, label: rt.name }));
+  const roomTypeOptions = allTypes.map((rt) => ({ value: rt.id, label: rt.name }));
 
   return (
     <div>

@@ -1,6 +1,8 @@
+import { useEffect, useMemo, useState } from 'react';
 import { Check } from 'lucide-react';
 import { roomService } from '@/services/roomService';
 import { roomTypeService } from '@/services/roomTypeService';
+import type { Room, RoomType } from '@/types/auth.types';
 import { Badge } from './Badge';
 import { getRoomTypeColor } from '@/constants/roomTypeColors';
 
@@ -16,11 +18,35 @@ interface RoomSelectorProps {
 }
 
 export function RoomSelector({ selectedRooms, onRoomToggle, disabled = false, unavailableRoomIds = [], unavailableLabel = 'Booked', roomTypeFilter = 'all' }: RoomSelectorProps) {
-  const rooms = roomService.getAll();
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [types, setTypes] = useState<RoomType[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setIsLoading(true);
+    Promise.all([roomService.getAll(), roomTypeService.getAll()]).then(([r, t]) => {
+      if (!cancelled) {
+        setRooms(r);
+        setTypes(t);
+        setIsLoading(false);
+      }
+    }).catch(() => {
+      if (!cancelled) {
+        setRooms([]);
+        setTypes([]);
+        setIsLoading(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const typeNameById = useMemo(() => new Map(types.map((t) => [t.id, t.name])), [types]);
 
   const getRoomTypeName = (roomTypeId: string) => {
-    const rt = roomTypeService.getById(roomTypeId);
-    return rt?.name || 'Unknown';
+    return typeNameById.get(roomTypeId) || 'Unknown';
   };
 
   // Group by actual room type; only groups that contain rooms are rendered.
@@ -39,6 +65,15 @@ export function RoomSelector({ selectedRooms, onRoomToggle, disabled = false, un
     .sort((a, b) =>
       a.roomTypeName.localeCompare(b.roomTypeName),
     );
+
+  if (isLoading) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <h4 style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: '#232D36', fontFamily: 'var(--font-family-sans)' }}>Select Rooms</h4>
+        <p style={{ margin: 0, fontSize: '14px', fontStyle: 'italic', color: '#6B7881' }}>Loading rooms...</p>
+      </div>
+    );
+  }
 
   if (groups.length === 0) {
     return (

@@ -1,0 +1,38 @@
+{
+  "name": "pms-internal-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "PMS Internal backend — Cloudflare Workers + Hono + D1 (SQLite) + Drizzle ORM. Phase 1: auth, users, roles, permissions.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "build": "tsc --noEmit",
+    "deploy": "wrangler deploy",
+    "db:create": "wrangler d1 create pms-internal-db",
+    "db:migrate:local": "wrangler d1 migrations apply pms-internal-db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply pms-internal-db --remote",
+    "db:seed:local": "node scripts/seed-local.mjs",
+    "db:seed:sql": "node scripts/generate-seed-sql.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "lint": "echo \"no linter configured yet\""
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "drizzle-orm": "^0.45.3",
+    "hono": "^4.13.11",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260929.1",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.0.0",
+    "better-sqlite3": "^12.4.1",
+    "drizzle-kit": "^0.31.11",
+    "typescript": "^5.6.3",
+    "vitest": "^5.0.2",
+    "wrangler": "^4.143.0"
+  }
+}

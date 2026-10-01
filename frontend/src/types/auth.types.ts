@@ -87,8 +87,8 @@ export interface Invoice {
   subtotal: number;
   discount: number;
   total: number;
-  paymentStatus: 'Pending' | 'Paid';
-  invoiceStatus: 'Draft' | 'Completed';
+  paymentStatus: 'Pending' | 'Paid' | 'Overdue' | 'Partial';
+  invoiceStatus: 'Draft' | 'Sent' | 'Completed' | 'Cancelled';
   createdAt: string;
   updatedAt: string;
 }

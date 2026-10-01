@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/shared/Button';
 import {
@@ -12,7 +12,8 @@ import {
   Star,
   Users,
 } from 'lucide-react';
-import { roomTypeService } from '@/services/roomTypeService';
+import { API_BASE_URL } from '@/services/api';
+import type { RoomType } from '@/types/auth.types';
 import { formatCurrency } from '@/utils/currencyUtils';
 import '../styles/home-sogo.css';
 
@@ -32,9 +33,26 @@ const PHOTO_SLIDES = [
 ];
 
 export default function HomePage() {
+  // Public catalog: active room types via GET /api/public/room-types (no auth).
+  const [roomTypes, setRoomTypes] = useState<RoomType[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_BASE_URL}/api/public/room-types`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json: { data: RoomType[] } | null) => {
+        if (!cancelled && json && Array.isArray(json.data)) setRoomTypes(json.data);
+      })
+      .catch(() => {
+        if (!cancelled) setRoomTypes([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const rooms = useMemo(
-    () => roomTypeService.getAll().filter((r) => r.status === 'active').slice(0, 3),
-    [],
+    () => roomTypes.filter((r) => r.status === 'active').slice(0, 3),
+    [roomTypes],
   );
 
   const [checkIn, setCheckIn] = useState('');

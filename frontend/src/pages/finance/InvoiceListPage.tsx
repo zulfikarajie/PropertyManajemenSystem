@@ -5,7 +5,6 @@ import { reservationService } from '@/services/reservationService';
 import { Button } from '@/components/shared/Button';
 import { Card } from '@/components/shared/Card';
 import { Input } from '@/components/shared/Input';
-import { Select } from '@/components/shared/Select';
 import { Table } from '@/components/shared/Table';
 import { Badge } from '@/components/shared/Badge';
 import { InvoiceForm } from '@/components/shared/InvoiceForm';
@@ -121,9 +120,23 @@ export default function InvoiceListPage() {
 
   const detailInvoice = detailInvoiceId ? service.getById(detailInvoiceId) || null : null;
 
+  const [reservationCodes, setReservationCodes] = useState<Map<string, string>>(new Map());
+
+  useEffect(() => {
+    let cancelled = false;
+    reservationService.getAll().then((rows) => {
+      if (!cancelled) setReservationCodes(new Map(rows.map((r) => [r.id, r.reservationCode])));
+    }).catch(() => {
+      if (!cancelled) setReservationCodes(new Map());
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const reservationCodeOf = (inv: Invoice) => {
     if (!inv.reservationId) return '—';
-    return reservationService.getById(inv.reservationId)?.reservationCode || inv.reservationId;
+    return reservationCodes.get(inv.reservationId) || inv.reservationId;
   };
 
   const handleCreate = (data: Parameters<Parameters<typeof InvoiceForm>[0]['onSubmit']>[0]) => {

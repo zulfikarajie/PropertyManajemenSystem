@@ -1,28 +1,24 @@
-import authService from './authService';
+import { apiFetch } from './api';
 
+/**
+ * Permission catalog client (`GET /api/permissions`).
+ * The catalog is read-only on the backend (seeded from mock data), so the
+ * previous mock-only create/update/delete helpers were removed.
+ */
 class PermissionService {
-  getAll(): any[] {
-    return authService.getAllPermissions();
+  async getAll(): Promise<any[]> {
+    const json = await apiFetch<{ data: any[] }>('/api/permissions');
+    return json.data;
   }
 
-  getById(id: string): any | undefined {
-    return authService.getPermissionById(id);
+  async getById(id: string): Promise<any | undefined> {
+    const all = await this.getAll();
+    return all.find((p: any) => p.id === id);
   }
 
-  getByName(name: string): any | undefined {
-    return authService.getPermissionByName(name);
-  }
-
-  create(data: any): any {
-    return authService.createPermission(data);
-  }
-
-  update(id: string, updates: any): any | null {
-    return authService.updatePermission(id, updates);
-  }
-
-  delete(id: string): boolean {
-    return authService.deletePermission(id);
+  async getByName(name: string): Promise<any | undefined> {
+    const all = await this.getAll();
+    return all.find((p: any) => p.name === name);
   }
 }
 

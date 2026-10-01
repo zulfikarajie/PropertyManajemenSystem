@@ -20,12 +20,9 @@ export default function ResetPasswordPage() {
     setIsSubmitting(true);
     try {
       if (token) {
-        const isValid = authService.validateResetToken(token);
-        if (!isValid) { setMessage('Invalid or expired token. Please request a new reset link.'); setIsSubmitting(false); return; }
-        const email = JSON.parse(atob(token)).email;
-        const success = authService.resetPassword(email, newPassword);
+        const success = await authService.resetPassword(token, newPassword);
         if (success) { setMessage('Password reset successfully! Redirecting to login...'); setTimeout(() => navigate('/login'), 2000); }
-        else { setMessage('Failed to reset password.'); }
+        else { setMessage('Invalid or expired token. Please request a new reset link.'); }
       }
     } finally {
       setIsSubmitting(false);

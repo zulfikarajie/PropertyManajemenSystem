@@ -1,6 +1,7 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CalendarDays } from 'lucide-react';
-import { reservationService } from '@/services/reservationService';
+import { reservationService, type ApiReservation } from '@/services/reservationService';
 import { invoiceService } from '@/services/invoiceService';
 import { reservationStatusLabels } from '@/constants/reservationStatuses';
 import { Modal } from './Modal';
@@ -33,14 +34,27 @@ export function formatPopupDate(date: Date): string {
 
 export function DayReservationsPopup({ date, filterRoomId, filterStatus, onClose, onViewAll }: DayReservationsPopupProps) {
   const open = date !== null;
+  const [all, setAll] = useState<ApiReservation[]>([]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    reservationService.getAll().then((rows) => {
+      if (!cancelled) setAll(rows);
+    }).catch(() => {
+      if (!cancelled) setAll([]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, date]);
 
   const dayReservations = (() => {
     if (!date) return [];
-    const all = reservationService.getAll();
     return all.filter((r) => {
       if (filterStatus && r.status !== filterStatus) return false;
       if (filterRoomId) {
-        const rooms = reservationService.getRoomsByReservationId(r.id);
+        const rooms = r.rooms ?? [];
         if (!rooms.find((room) => room.roomId === filterRoomId)) return false;
       }
       const checkIn = new Date(r.checkInDate);
@@ -81,7 +95,7 @@ export function DayReservationsPopup({ date, filterRoomId, filterStatus, onClose
       {date && dayReservations.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {dayReservations.map((r) => {
-            const rooms = reservationService.getRoomsByReservationId(r.id);
+            const rooms = r.rooms ?? [];
             const invoice = invoiceByReservationId.get(r.id);
             return (
               <div

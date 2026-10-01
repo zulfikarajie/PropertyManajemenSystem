@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -13,6 +13,7 @@ import { ReservationPricingPanel } from './ReservationPricingPanel';
 import { useReservationPricing } from '@/hooks/useReservationPricing';
 import { roomService } from '@/services/roomService';
 import { roomTypeService } from '@/services/roomTypeService';
+import type { Room, RoomType } from '@/types/auth.types';
 import type { ReservationPricingState } from '@/types/pricing.types';
 
 const createReservationSchema = z.object({
@@ -47,14 +48,16 @@ interface ReservationFormProps {
   loading?: boolean;
 }
 
-function resolveReference(roomIds: string[]): { referenceRate: number; roomTypeName: string } {
+function resolveReference(roomIds: string[], rooms: Room[], types: RoomType[]): { referenceRate: number; roomTypeName: string } {
   if (roomIds.length === 0) return { referenceRate: 0, roomTypeName: '' };
+  const roomById = new Map(rooms.map((r) => [r.id, r]));
+  const typeById = new Map(types.map((t) => [t.id, t]));
   let total = 0;
   const names = new Set<string>();
   for (const roomId of roomIds) {
-    const room = roomService.getById(roomId);
+    const room = roomById.get(roomId);
     if (!room) continue;
-    const rt = roomTypeService.getById(room.roomTypeId);
+    const rt = typeById.get(room.roomTypeId);
     if (!rt) continue;
     total += Number(rt.defaultRate) || 0;
     names.add(rt.name);
@@ -83,7 +86,27 @@ export function ReservationForm({ initialData, initialPricing, onSubmit, onCance
   const checkOutDate = watch('checkOutDate') || '';
   const source = watch('source') || '';
 
-  const { referenceRate, roomTypeName } = useMemo(() => resolveReference(selectedRooms), [selectedRooms]);
+  const [allRooms, setAllRooms] = useState<Room[]>([]);
+  const [allTypes, setAllTypes] = useState<RoomType[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([roomService.getAll(), roomTypeService.getAll()]).then(([r, t]) => {
+      if (!cancelled) {
+        setAllRooms(r);
+        setAllTypes(t);
+      }
+    }).catch(() => {
+      if (!cancelled) {
+        setAllRooms([]);
+        setAllTypes([]);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const { referenceRate, roomTypeName } = useMemo(() => resolveReference(selectedRooms, allRooms, allTypes), [selectedRooms, allRooms, allTypes]);
 
   const pricingController = useReservationPricing({
     checkInDate,

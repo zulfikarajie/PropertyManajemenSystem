@@ -33,12 +33,40 @@ export default function UserListPage() {
   const [modal, setModal] = useState<UserModal>(null);
   const [filterOpen, setFilterOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
-  const [draft, setDraft] = useState<{ status: string }>({ status: 'all' });
+  const [draft, setDraft] = useState<Record<string, string>>({ status: 'all' });
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const filterWrapRef = useRef<HTMLDivElement>(null);
-  const users = userService.getAll();
+  const [users, setUsers] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [reloadToken, setReloadToken] = useState(0);
   const closeModal = () => setModal(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setIsLoading(true);
+    setLoadError('');
+    userService.getAll().then((u) => {
+      if (!cancelled) {
+        setUsers(u);
+        setIsLoading(false);
+      }
+    }).catch(() => {
+      if (!cancelled) {
+        setLoadError('Failed to load users');
+        setIsLoading(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadToken]);
+
+  const handleModalSuccess = () => {
+    closeModal();
+    setReloadToken((t) => t + 1);
+  };
 
   const filtered = useMemo(() => {
     return users.filter((u: any) => {
@@ -253,7 +281,8 @@ export default function UserListPage() {
           </span>
         </div>
       </div>
-      <Table columns={columns} data={visibleUsers} emptyMessage="No users found" />
+      {loadError && <div role="alert" style={{ color: '#C85C5C', fontSize: '14px', marginBottom: '12px' }}>{loadError}</div>}
+      <Table columns={columns} data={visibleUsers} emptyMessage={isLoading ? 'Loading users...' : 'No users found'} />
       {filtered.length > 0 && (
         <Pagination
           currentPage={safePage}
@@ -273,10 +302,10 @@ export default function UserListPage() {
         size="md"
       >
         {modal?.mode === 'create' && (
-          <UserForm key="new" onSuccess={closeModal} onCancel={closeModal} />
+          <UserForm key="new" onSuccess={handleModalSuccess} onCancel={closeModal} />
         )}
         {modal?.mode === 'assign' && (
-          <UserRoleForm key={modal.id} userId={modal.id} onSuccess={closeModal} onCancel={closeModal} />
+          <UserRoleForm key={modal.id} userId={modal.id} onSuccess={handleModalSuccess} onCancel={closeModal} />
         )}
       </Modal>
     </div>

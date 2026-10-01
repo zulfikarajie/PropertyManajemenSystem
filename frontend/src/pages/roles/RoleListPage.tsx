@@ -31,11 +31,39 @@ export default function RoleListPage() {
   const [modal, setModal] = useState<RoleModal>(null);
   const [filterOpen, setFilterOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
-  const [draft, setDraft] = useState<{ status: string }>({ status: 'all' });
+  const [draft, setDraft] = useState<Record<string, string>>({ status: 'all' });
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const filterWrapRef = useRef<HTMLDivElement>(null);
-  const roles = roleService.getAll();
+  const [roles, setRoles] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [reloadToken, setReloadToken] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setIsLoading(true);
+    setLoadError('');
+    roleService.getAll().then((r) => {
+      if (!cancelled) {
+        setRoles(r);
+        setIsLoading(false);
+      }
+    }).catch(() => {
+      if (!cancelled) {
+        setLoadError('Failed to load roles');
+        setIsLoading(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadToken]);
+
+  const handleModalSuccess = () => {
+    closeModal();
+    setReloadToken((t) => t + 1);
+  };
 
   const filtered = useMemo(() => {
     return roles.filter((r: any) => {
@@ -240,7 +268,8 @@ export default function RoleListPage() {
           </span>
         </div>
       </div>
-      <Table columns={columns} data={visibleRoles} emptyMessage="No roles found" />
+      {loadError && <div role="alert" style={{ color: '#C85C5C', fontSize: '14px', marginBottom: '12px' }}>{loadError}</div>}
+      <Table columns={columns} data={visibleRoles} emptyMessage={isLoading ? 'Loading roles...' : 'No roles found'} />
       {filtered.length > 0 && (
         <Pagination
           currentPage={safePage}
@@ -263,7 +292,7 @@ export default function RoleListPage() {
           <RoleForm
             key={modal.mode === 'edit' ? modal.id : 'new'}
             id={modal.mode === 'edit' ? modal.id : undefined}
-            onSuccess={closeModal}
+            onSuccess={handleModalSuccess}
             onCancel={closeModal}
           />
         )}

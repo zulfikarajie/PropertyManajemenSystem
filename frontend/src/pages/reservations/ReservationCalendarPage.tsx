@@ -98,8 +98,26 @@ export default function ReservationCalendarPage() {
     setAppliedStatus('all');
   };
 
-  const rooms = roomService.getAll();
-  const reservations = reservationService.getAll();
+  const [rooms, setRooms] = useState<Array<{ id: string; roomNumber: string; status: string }>>([]);
+  const [reservations, setReservations] = useState<any[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    roomService.getAll().then((rows) => {
+      if (!cancelled) setRooms(rows);
+    }).catch(() => {
+      if (!cancelled) setRooms([]);
+    });
+    reservationService.getAll().then((rows) => {
+      if (!cancelled) setReservations(rows);
+    }).catch(() => {
+      if (!cancelled) setReservations([]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const activeRooms = rooms.filter((r) => r.status === 'active').length;
   const activeFilterCount = (appliedRoom !== 'all' ? 1 : 0) + (appliedStatus !== 'all' ? 1 : 0);
 

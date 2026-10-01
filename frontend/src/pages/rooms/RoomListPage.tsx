@@ -5,21 +5,14 @@ import { roomTypeService } from '@/services/roomTypeService';
 import { Table } from '@/components/shared/Table';
 import { Button } from '@/components/shared/Button';
 import { Badge } from '@/components/shared/Badge';
-import { Card } from '@/components/shared/Card';
 import { Input } from '@/components/shared/Input';
-import { Select } from '@/components/shared/Select';
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog';
 import { Modal } from '@/components/shared/Modal';
 import { RoomForm } from '@/components/shared/RoomForm';
-import { Room } from '@/types/auth.types';
+import { Room, RoomType } from '@/types/auth.types';
 import '../../styles/reservation-list.css';
 
 type RoomModal = { mode: 'create' } | { mode: 'edit'; id: string } | null;
-
-const getStatusLabel = (status: string) => {
-  const labels: Record<string, string> = { active: 'Active', inactive: 'Inactive', maintenance: 'Maintenance' };
-  return labels[status] || status;
-};
 
 export default function RoomListPage() {
   const [search, setSearch] = useState('');
@@ -29,14 +22,42 @@ export default function RoomListPage() {
   const [modal, setModal] = useState<RoomModal>(null);
   const [filterOpen, setFilterOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
-  const [draft, setDraft] = useState<{ type: string; status: string }>({ type: 'all', status: 'all' });
+  const [draft, setDraft] = useState<Record<string, string>>({ type: 'all', status: 'all' });
   const filterWrapRef = useRef<HTMLDivElement>(null);
   const service = roomService;
   const typeService = roomTypeService;
+  const [allRooms, setAllRooms] = useState<Room[]>([]);
+  const [allTypes, setAllTypes] = useState<RoomType[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [reloadToken, setReloadToken] = useState(0);
   const closeModal = () => setModal(null);
 
-  const allRooms = service.getAll();
-  const allTypes = typeService.getAll();
+  const handleModalSuccess = () => {
+    closeModal();
+    setReloadToken((t) => t + 1);
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    setIsLoading(true);
+    setLoadError('');
+    Promise.all([service.getAll(), typeService.getAll()]).then(([rooms, types]) => {
+      if (!cancelled) {
+        setAllRooms(rooms);
+        setAllTypes(types);
+        setIsLoading(false);
+      }
+    }).catch(() => {
+      if (!cancelled) {
+        setLoadError('Failed to load rooms');
+        setIsLoading(false);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadToken]);
 
   const typeOptions = [
     { value: 'all', label: 'All Types' },
@@ -98,6 +119,12 @@ export default function RoomListPage() {
   const getTypeLabel = (roomTypeId: string) => {
     const type = allTypes.find((t) => t.id === roomTypeId);
     return type?.name || 'Unknown';
+  };
+
+  const handleDelete = async (id: string) => {
+    await service.delete(id);
+    setDeleteConfirm(null);
+    setReloadToken((t) => t + 1);
   };
 
   const columns = [
@@ -298,12 +325,14 @@ export default function RoomListPage() {
         </div>
       </div>
 
-      <Table columns={columns} data={filteredRooms} />
+      {loadError && <p role="alert" style={{ fontSize: '14px', color: '#962222' }}>{loadError}</p>}
+
+      <Table columns={columns} data={filteredRooms} emptyMessage={isLoading ? 'Loading rooms...' : undefined} />
 
       <ConfirmDialog
         open={!!deleteConfirm}
         onClose={() => setDeleteConfirm(null)}
-        onConfirm={() => deleteConfirm && (service.delete(deleteConfirm), setDeleteConfirm(null))}
+        onConfirm={() => deleteConfirm && handleDelete(deleteConfirm)}
         title="Delete Room"
         message="Are you sure you want to delete this room?"
         confirmText="Delete"
@@ -320,7 +349,7 @@ export default function RoomListPage() {
           <RoomForm
             key={modal.mode === 'edit' ? modal.id : 'new'}
             id={modal.mode === 'edit' ? modal.id : undefined}
-            onSuccess={closeModal}
+            onSuccess={handleModalSuccess}
             onCancel={closeModal}
           />
         )}
